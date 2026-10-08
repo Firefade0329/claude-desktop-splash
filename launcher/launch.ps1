@@ -217,7 +217,7 @@ $prof = Join-Path $here 'edge-profile'
 $args = @(
   "--app=$url",
   '--window-position=-32000,-32000', '--window-size=800,600',      # born off-screen so it never flashes at a default position
-  "--user-data-dir=$prof",
+  ('--user-data-dir="' + $prof + '"'),      # quoted: the path may contain spaces (5.1 does not quote array items itself)
   '--no-first-run', '--no-default-browser-check', '--disable-sync', '--disable-infobars', '--lang=zh-CN', '--disable-translate',
   '--disable-session-crashed-bubble', '--hide-crash-restore-bubble',
   # An off-screen / invisible window counts as "occluded" to Chromium, which then stops requestAnimationFrame and resize events
@@ -227,7 +227,8 @@ $args = @(
   '--disable-background-networking'
 )
 Log "browser: $browser"
-$p = Start-Process -FilePath $browser -ArgumentList $args -PassThru
+try { $p = Start-Process -FilePath $browser -ArgumentList $args -PassThru -ErrorAction Stop }
+catch { Log ('could not start the splash window: ' + $_); if (-not $NoClaude) { Start-ClaudeApp }; return }
 $h = [IntPtr]::Zero
 $claudeStarted = $false
 $t0 = Get-Date
@@ -343,6 +344,7 @@ try {
   }
 }
 finally {
+  if (-not $claudeStarted -and -not $NoClaude) { $claudeStarted = $true; Log 'safety net: starting Claude after the splash ended without starting it'; Start-ClaudeApp }
   Stop-Splash
   Log 'splash closed'
   # the browser profile is throw-away (Edge fills it with ~100 MB of metrics/models): delete it after every run, it is re-created on the next start
