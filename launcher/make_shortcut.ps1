@@ -84,5 +84,5 @@ function New-Link([string]$dir) {
   [LinkMaker]::Create($lnk, $ps, $arg, $here, $ico, 'Claude with startup animation', 7)
   Write-Output "shortcut = $lnk"
 }
-New-Link (Split-Path -Parent $here)                       # D:\...\splash\
+New-Link (Split-Path -Parent $here)                       # the folder that holds launcher\ (repository root)
 if ($Desktop) { New-Link ([Environment]::GetFolderPath('Desktop')) }
