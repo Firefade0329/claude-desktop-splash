@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+## 1.0.2 — 2026-10-08
+
+只有文档，没有改动脚本和动画。
+
+### 文档
+- README 对照代码做了一轮核对：说明只支持 Microsoft Store 版 Claude；Windows 10 未验证；找不到 Edge 时会尝试 Chrome；“8 秒放弃”从窗口出现后开始计时、窗口一直不出现要等约 34 秒；补上 `-MaxSplashSec` 选项；快捷方式生成在仓库文件夹里、加 `-Desktop` 才复制到桌面；欢迎语是固定文字、可在 `splash.html` 里修改；整段动画实测约 13 秒。
+- 新增“故障排查”（日志对照、定位问题的顺序、没装 Edge、杀毒软件或权限拦截、多显示器、窗口不消失）和“卸载”两节；其中没在 Windows 上实际验证的内容都已标明“未验证”。
+- 新增 `CONTRIBUTING.md`、`SECURITY.md` 和 issue 模板（反馈 bug 时请附 Claude 桌面应用版本、Windows 版本和 `launcher.log` 片段）。安全问题请用 GitHub 的 “Report a vulnerability” 私下报告。
+
 ## 1.0.1 — 2026-10-08
 
 ### 修复

@@ -19,7 +19,7 @@
 
 ## 不要提交的文件（已在 .gitignore）
 
-`launcher/launcher.log`、`launcher/last_rect.json`、`launcher/config.json`、`launcher/claude.ico`、`*.lnk`。其中 `claude.ico` 是 Claude 应用的官方图标，属于商标素材，**绝对不要加入仓库**。
+`launcher/launcher.log`、`launcher/last_rect.json`、`launcher/config.json`、`launcher/claude.ico`、`launcher/edge-profile/`（Edge 的临时配置目录，约 100 MB）、`*.lnk`。其中 `claude.ico` 是 Claude 应用的官方图标，属于商标素材，**绝对不要加入仓库**。
 
 ## 改脚本时的注意事项（PowerShell 5.1）
 
