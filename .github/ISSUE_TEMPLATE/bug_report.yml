@@ -1,0 +1,93 @@
+name: Bug 反馈 / Bug report
+description: 开屏动画或启动器出了问题（没有动画、Claude 没打开、位置不对、窗口不消失等）
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！这个项目只能在 Windows 上运行，所以环境信息和日志对定位问题特别重要。
+        **不要贴个人信息**：用户名、电脑名、不想公开的路径、令牌。日志贴之前请自己检查一遍。
+        也可以先看 README 里的"故障排查"。
+  - type: input
+    id: claude-version
+    attributes:
+      label: Claude 桌面应用的版本
+      description: 在 Claude 桌面应用里查看版本号（位置因版本而异）。
+    validations:
+      required: true
+  - type: dropdown
+    id: claude-install
+    attributes:
+      label: Claude 桌面应用的安装方式
+      description: 目前代码只识别 Microsoft Store 版的窗口和配置位置。
+      options:
+        - Microsoft Store
+        - 其他安装包
+        - 不确定
+    validations:
+      required: true
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows 版本
+      description: 按 Win+R，输入 `winver`，把显示的版本和内部版本号写在这里。
+      placeholder: 例如 Windows 11 23H2（内部版本 22631.xxxx）
+    validations:
+      required: true
+  - type: input
+    id: splash-version
+    attributes:
+      label: 本项目的版本
+      description: 你下载的版本标签，或 `CHANGELOG.md` 最上面一节的版本号。
+      placeholder: 例如 1.0.1
+    validations:
+      required: true
+  - type: input
+    id: edge-version
+    attributes:
+      label: Edge 版本（可选）
+      description: 在 Edge 地址栏输入 `edge://settings/help` 可以看到。
+  - type: textarea
+    id: display
+    attributes:
+      label: 显示器数量和缩放比例（位置、大小不对时请填）
+      description: 例如"两个显示器，主屏 150%，副屏 100%，Claude 在副屏上"。
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 一步一步写。仓库放在哪种路径下（是否有空格、中文）也请写一下，不用写完整路径。
+      placeholder: |
+        1. 双击桌面快捷方式……
+        2. 看到……
+    validations:
+      required: true
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: 期望的表现和实际的表现
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: launcher\launcher.log 的片段
+      description: 出问题那一次运行的日志（从最近一行 `--- launcher start` 开始）。**贴之前请去掉个人信息。** 日志文件不存在就写"无"。
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: switches
+    attributes:
+      label: 用 -NoSplash / -NoClaude / -Fullscreen 试过吗（可选）
+      description: 见 README 的"故障排查"，写下你试了哪个、结果如何。
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 确认
+      options:
+        - label: 我检查过，上面填的内容和日志里没有个人信息（用户名、电脑名、不想公开的路径、令牌）。
+          required: true
+        - label: 我搜过已有的 Issue，没有找到相同的问题。
+          required: true

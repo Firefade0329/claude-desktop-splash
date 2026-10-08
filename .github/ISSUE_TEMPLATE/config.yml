@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 私下报告安全问题 / Report a security issue privately
+    url: https://github.com/Firefade0329/claude-desktop-splash/security/advisories/new
+    about: 请不要在公开 Issue 里写漏洞细节，详见仓库里的 SECURITY.md。
