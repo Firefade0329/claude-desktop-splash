@@ -72,6 +72,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 - `splash.html` 是动画本身（Canvas 绘制的网页）。
 - `launcher\launch.ps1` 用 Edge 的 `--app` 模式打开它，把窗口裁剪到刚好盖住 Claude 的窗口，并在后台启动 Claude；播完后淡出。
 - 冷启动时，窗口位置取自 Claude 自己保存的 `window-state.json`，读不到时才退回到上次记住的位置或整个屏幕。
+- 同一时间只运行一个启动器：快速连点两次快捷方式时，第二个只负责启动 Claude，不会去打断第一个。
+- 每次运行都用一个全新的临时 Edge 配置目录（`launcher\edge-profile-xxxxxxxx`，约 100 MB），播完就删。如果上一次的启动器被强行结束、没来得及清理，下一次启动时会自动清掉残留的动画窗口和配置目录。
+- 播完后，Claude 的窗口会被带到前台；只有它被最小化时才会还原，最大化的窗口不会被缩小。
 - 运行日志写在 `launcher\launcher.log`（不会上传到仓库）。
 
 ## 已知限制
@@ -101,6 +104,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 | `safety net: starting Claude after the splash ended without starting it` | 动画流程结束时 Claude 还没启动，补启动了一次（v1.0.1 起） |
 | `Claude window not found at the end` | 播完后没有找到 Claude 的窗口（所以没有把它置前） |
 | `profile cleanup incomplete: ...` | 动画用的临时 Edge 配置目录没删干净 |
+| `another splash launcher is already running: starting Claude only` | 已经有一个启动器在运行（比如连点了两次快捷方式），这一个只启动 Claude（v1.1.0 起） |
+| `removed a leftover profile folder: edge-profile-...` | 清掉了上一次被强行结束的运行留下的配置目录（v1.1.0 起） |
+| `could not remove a leftover profile folder: ...` | 上一次留下的配置目录删不掉（被占用或没有权限），可以手动删除 `launcher\edge-profile-*`（v1.1.0 起） |
 
 反馈问题时，把出问题那一次运行的日志（从最近一行 `--- launcher start` 开始）贴出来会很有帮助。**贴之前请先检查一遍，不要带上个人信息**（用户名、电脑名、不想公开的路径）。
 
@@ -156,7 +162,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 
 ### 动画窗口没有消失
 
-先点一下动画，或者按 Esc / 空格 / 回车（键盘按键在某些情况下可能收不到，我没有验证，点击更可靠）。仍然不消失时，可以在任务管理器里结束 Microsoft Edge 的进程——注意这也会关掉你自己正在用的 Edge 窗口。正常结束时，启动器会自动结束动画用的 Edge 并删除临时配置目录 `launcher\edge-profile\`（约 100 MB）；如果启动器被强行结束，这个目录可能残留，确认动画窗口已经关闭后可以手动删除（它是一次性的，运行时会重新创建）。
+先点一下动画，或者按 Esc / 空格 / 回车（键盘按键在某些情况下可能收不到，我没有验证，点击更可靠）。仍然不消失时，可以在任务管理器里结束 Microsoft Edge 的进程——注意这也会关掉你自己正在用的 Edge 窗口。启动器被强行结束（任务管理器、关机等）时窗口可能残留，**再双击一次快捷方式就会自动清掉**（v1.1.0 起）。正常结束时，启动器会自动结束动画用的 Edge 并删除临时配置目录 `launcher\edge-profile\`（约 100 MB）；如果启动器被强行结束，这个目录可能残留，确认动画窗口已经关闭后可以手动删除（它是一次性的，运行时会重新创建）。
 
 ## 卸载
 
@@ -170,7 +176,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 3. **（可选）只清理自动生成的文件，保留仓库**：在仓库文件夹里运行
 
    ```powershell
-   Remove-Item -Recurse -Force .\launcher\edge-profile -ErrorAction SilentlyContinue
+   Remove-Item -Recurse -Force .\launcher\edge-profile* -ErrorAction SilentlyContinue
    Remove-Item .\launcher\config.json, .\launcher\claude.ico, .\launcher\last_rect.json, .\launcher\launcher.log -ErrorAction SilentlyContinue
    ```
 

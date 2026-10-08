@@ -21,8 +21,10 @@
     -FadeMs N         fade-out duration (default 800)
     -FadeInMs N       fade-in duration when the splash appears (default 250)
     -ReadyTimeoutSec N  give up on the splash if the page is not ready after N s (default 8); Claude is still started
+    -MaxSplashSec N   the splash window stays at most N s (default 22), then it is ended
   Skip while playing: Esc / Space / Enter / click.  Log: launcher.log (next to this file).
-  Test hook: env SPLASH_TRACK_PROC=<process name> follows that process' window instead of Claude.
+  Test hooks (leave unset in normal use): env SPLASH_TRACK_PROC=<process name> / SPLASH_TRACK_TITLE=<text> follow that window
+  instead of Claude, SPLASH_DEBUG=1 makes the page report frame stalls.
 #>
 param(
   [switch]$NoClaude,
@@ -130,7 +132,21 @@ function Get-ClaudeWindow {
   return $null
 }
 
+function Stop-ProcessesUsing([string]$needle) {
+  try {
+    Get-CimInstance Win32_Process -Filter "Name='msedge.exe' OR Name='chrome.exe'" |
+      Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase) -ge 0 } |
+      ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  } catch {}
+}
+
 if ($NoSplash) { Start-ClaudeApp; return }
+
+# Only one launcher at a time: a second double-click would otherwise kill the first one's browser and delete its profile.
+$script:mutex = New-Object System.Threading.Mutex($false, 'Local\ClaudeDesktopSplashLauncher')
+$hasMutex = $false
+try { $hasMutex = $script:mutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $hasMutex = $true }      # a killed earlier run: we own it now
+if (-not $hasMutex) { Log 'another splash launcher is already running: starting Claude only'; if (-not $NoClaude) { Start-ClaudeApp }; return }
 
 # ---- where should the splash go? ----
 Add-Type -AssemblyName System.Windows.Forms
@@ -213,8 +229,13 @@ if (-not $browser) { Log 'no Edge/Chrome found, starting Claude only'; if (-not 
 $splashHtml = (Resolve-Path -LiteralPath (Join-Path $here '..\splash.html')).Path
 $url = ([System.Uri]$splashHtml).AbsoluteUri + '?launcher'
 if ($env:SPLASH_DEBUG) { $url += '&dbg' }                  # test hook: the page reports frame stalls through the window title
-$prof = Join-Path $here 'edge-profile'
-$args = @(
+$prof = Join-Path $here ('edge-profile-' + [guid]::NewGuid().ToString('N').Substring(0, 8))      # a new folder every run
+# Whatever an earlier run left behind (it was killed before it could clean up): its browser window, then its profile folder.
+# We hold the mutex, so no other launcher is running, and nothing of ours is alive.
+Stop-ProcessesUsing (Join-Path $here 'edge-profile')
+Start-Sleep -Milliseconds 300
+Get-ChildItem -LiteralPath $here -Directory -Filter 'edge-profile*' -ErrorAction SilentlyContinue | ForEach-Object { try { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction Stop; Log ('removed a leftover profile folder: ' + $_.Name) } catch { Log ('could not remove a leftover profile folder: ' + $_.Name) } }
+$edgeArgs = @(
   "--app=$url",
   '--window-position=-32000,-32000', '--window-size=800,600',      # born off-screen so it never flashes at a default position
   ('--user-data-dir="' + $prof + '"'),      # quoted: the path may contain spaces (5.1 does not quote array items itself)
@@ -227,7 +248,7 @@ $args = @(
   '--disable-background-networking'
 )
 Log "browser: $browser"
-try { $p = Start-Process -FilePath $browser -ArgumentList $args -PassThru -ErrorAction Stop }
+try { $p = Start-Process -FilePath $browser -ArgumentList $edgeArgs -PassThru -ErrorAction Stop }
 catch { Log ('could not start the splash window: ' + $_); if (-not $NoClaude) { Start-ClaudeApp }; return }
 $h = [IntPtr]::Zero
 $claudeStarted = $false
@@ -240,9 +261,7 @@ $nc = 0                  # height of the browser's own title bar in physical pix
 $curRect = $null
 $done = $false
 
-function Stop-Splash {
-  try { Get-CimInstance Win32_Process -Filter "Name='msedge.exe' OR Name='chrome.exe'" | Where-Object { $_.CommandLine -like "*$prof*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } } catch {}
-}
+function Stop-Splash { Stop-ProcessesUsing $prof }
 # put the splash window over the target rectangle (extra height = title bar, which is clipped away with a window region)
 $bx = 0; $bb = 0        # invisible frame Chromium keeps left/right ($bx each) and at the bottom ($bb); measured after the first placement
 function Place-Splash($hwnd, $tr) {
@@ -347,17 +366,23 @@ finally {
   if (-not $claudeStarted -and -not $NoClaude) { $claudeStarted = $true; Log 'safety net: starting Claude after the splash ended without starting it'; Start-ClaudeApp }
   Stop-Splash
   Log 'splash closed'
+  # bring Claude to the front once the splash is gone (before the slow clean-up below). SW_RESTORE only for a minimised
+  # window: on a maximised one it would shrink the window back to its normal size.
+  if (-not $NoClaude) {
+    $c = Get-ClaudeWindow
+    if ($c) {
+      if ([SplashWin]::IsIconic($c.MainWindowHandle)) { [SplashWin]::ShowWindow($c.MainWindowHandle, 9) | Out-Null }
+      [SplashWin]::SetForegroundWindow($c.MainWindowHandle) | Out-Null
+      Log 'Claude brought to front'
+    } else { Log 'Claude window not found at the end' }
+  }
   # the browser profile is throw-away (Edge fills it with ~100 MB of metrics/models): delete it after every run, it is re-created on the next start
   # (Edge's helper processes can take a moment to let go of their files, especially when the machine is busy: retry)
   for ($try = 0; $try -lt 8 -and (Test-Path -LiteralPath $prof); $try++) {
     Start-Sleep -Milliseconds 500
     try { Remove-Item -LiteralPath $prof -Recurse -Force -ErrorAction Stop } catch { if ($try -eq 7) { Log ('profile cleanup incomplete: ' + $_.Exception.Message) } else { Stop-Splash } }
   }
+  try { $script:mutex.ReleaseMutex() } catch {}
 }
 
-# bring Claude to the front once the splash is gone
-if (-not $NoClaude) {
-  $c = Get-ClaudeWindow
-  if ($c) { [SplashWin]::ShowWindow($c.MainWindowHandle, 9) | Out-Null; [SplashWin]::SetForegroundWindow($c.MainWindowHandle) | Out-Null; Log 'Claude brought to front' } else { Log 'Claude window not found at the end' }
-}
 Log '--- launcher end'

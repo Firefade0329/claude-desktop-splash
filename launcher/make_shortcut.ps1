@@ -59,8 +59,18 @@ public static class LinkMaker {
 
 # AppUserModelID of the installed Claude app
 $aumid = $null
-try { $aumid = (Get-StartApps | Where-Object { $_.Name -eq 'Claude' } | Select-Object -First 1).AppID } catch {}
-if (-not $aumid) { $aumid = 'Claude_pzs8sxrjxfjjc!Claude' }
+# Several Start-menu entries can be called "Claude" (e.g. claude.ai installed as a web app): prefer the Store app's ID (Claude_...!...).
+try {
+  $found = @(Get-StartApps | Where-Object { $_.Name -eq 'Claude' })
+  $pick = $found | Where-Object { $_.AppID -like 'Claude_*!*' } | Select-Object -First 1
+  if (-not $pick) { $pick = $found | Select-Object -First 1 }
+  if ($pick) { $aumid = $pick.AppID }
+  if ($found.Count -gt 1) { Write-Warning ('More than one Start-menu entry is called Claude: ' + (($found | ForEach-Object { $_.AppID }) -join ' ; ') + ' -- using ' + $aumid) }
+} catch {}
+if (-not $aumid) {
+  $aumid = 'Claude_pzs8sxrjxfjjc!Claude'
+  Write-Warning 'Could not find the Claude desktop app in the Start menu (is the Microsoft Store version installed?). Using the default ID; the shortcut may not start Claude.'
+}
 (@{ aumid = $aumid } | ConvertTo-Json) | Set-Content -LiteralPath (Join-Path $here 'config.json') -Encoding ASCII
 Write-Output "aumid = $aumid"
 
@@ -68,7 +78,9 @@ Write-Output "aumid = $aumid"
 $icoPath = Join-Path $here 'claude.ico'
 try {
   $exe = (Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '*WindowsApps*Claude_*' } | Select-Object -First 1).Path
+  if (-not $exe) { try { $loc = (Get-AppxPackage -Name 'Claude*' -ErrorAction Stop | Select-Object -First 1).InstallLocation; if ($loc) { $exe = Join-Path $loc 'app\Claude.exe' } } catch {} }
   if (-not $exe) { $exe = (Get-ChildItem 'C:\Program Files\WindowsApps' -Directory -Filter 'Claude_*' -ErrorAction SilentlyContinue | Select-Object -First 1 | ForEach-Object { Join-Path $_.FullName 'app\Claude.exe' }) }
+  if (-not $exe -or -not (Test-Path -LiteralPath $exe)) { throw 'Claude.exe not found (start Claude once and run this again)' }
   Add-Type -AssemblyName System.Drawing
   $ic = [System.Drawing.Icon]::ExtractAssociatedIcon($exe)
   $fs = [System.IO.File]::Create($icoPath); $ic.Save($fs); $fs.Close()

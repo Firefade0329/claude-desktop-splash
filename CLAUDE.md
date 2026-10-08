@@ -19,7 +19,7 @@
 
 ## 不要提交的文件（已在 .gitignore）
 
-`launcher/launcher.log`、`launcher/last_rect.json`、`launcher/config.json`、`launcher/claude.ico`、`launcher/edge-profile/`（Edge 的临时配置目录，约 100 MB）、`*.lnk`。其中 `claude.ico` 是 Claude 应用的官方图标，属于商标素材，**绝对不要加入仓库**。
+`launcher/launcher.log`、`launcher/last_rect.json`、`launcher/config.json`、`launcher/claude.ico`、`launcher/edge-profile*/`（Edge 的临时配置目录，每次运行一个新的，约 100 MB）、`*.lnk`。其中 `claude.ico` 是 Claude 应用的官方图标，属于商标素材，**绝对不要加入仓库**。
 
 ## 改脚本时的注意事项（PowerShell 5.1）
 
@@ -37,7 +37,7 @@
 
 ## 更新记录
 
-版本记录在 `CHANGELOG.md`（当前 1.0.1）。每次更新同时：在 CHANGELOG 里加一节，打 `vX.Y.Z` 标签，并用 `gh release create` 发布说明；这些由维护者确认后再做，云端不要自己打标签或发 Release。
+版本记录在 `CHANGELOG.md`（当前 1.1.0）。每次更新同时：在 CHANGELOG 里加一节，打 `vX.Y.Z` 标签，并用 `gh release create` 发布说明；这些由维护者确认后再做，云端不要自己打标签或发 Release。
 
 ## 和用户沟通
 
