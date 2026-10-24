@@ -169,8 +169,13 @@ function Get-ClaudeStateRect {
   $script:stateRect = $null
   try {
     $pkg = $aumid.Split('!')[0]
-    $f = Join-Path $env:LOCALAPPDATA "Packages\$pkg\LocalCache\Roaming\Claude\window-state.json"
-    if (-not (Test-Path -LiteralPath $f)) { return $null }
+    # Claude keeps this file in its own data folder. The desktop update of October 2026 moved it from the package's LocalCache
+    # to Local\Claude-Data\<package>: look in both places and take the one written most recently.
+    $f = $null
+    foreach ($c in @((Join-Path $env:LOCALAPPDATA "Claude-Data\$pkg\window-state.json"), (Join-Path $env:LOCALAPPDATA "Packages\$pkg\LocalCache\Roaming\Claude\window-state.json"))) {
+      if ((Test-Path -LiteralPath $c) -and (-not $f -or (Get-Item -LiteralPath $c).LastWriteTime -gt (Get-Item -LiteralPath $f).LastWriteTime)) { $f = $c }
+    }
+    if (-not $f) { return $null }
     $s = Get-Content -LiteralPath $f -Raw | ConvertFrom-Json
     $dw = [double]$s.displayBounds.width; $dh = [double]$s.displayBounds.height
     if ($dw -lt 100 -or $dh -lt 100) { return $null }
@@ -188,6 +193,14 @@ function Get-ClaudeStateRect {
     }
   } catch {}
   return $script:stateRect
+}
+function Log-ClaudeRect([string]$tag) {
+  try {
+    $c = Get-ClaudeWindow
+    if (-not $c) { Log ($tag + ': no Claude window'); return }
+    $r = New-Object SplashWin+RECT
+    if ([SplashWin]::FrameRect($c.MainWindowHandle, [ref]$r)) { Log ('{0}: Claude window at {1},{2} {3}x{4} zoomed={5}' -f $tag, $r.L, $r.T, ($r.R - $r.L), ($r.B - $r.T), [SplashWin]::IsZoomed($c.MainWindowHandle)) }
+  } catch {}
 }
 function Get-TargetRect {
   # returns @{ L; T; R; B; Zoomed; Source }
@@ -346,7 +359,7 @@ try {
       if (-not $claudeStarted) { $claudeStarted = $true; Start-ClaudeApp }
       $w = Get-Date
       while (((Get-Date) - $w).TotalSeconds -lt 8) {
-        if (Get-ClaudeWindow) { Log 'Claude window found'; break }
+        if (Get-ClaudeWindow) { Log 'Claude window found'; Log-ClaudeRect 'found'; break }
         $tr = Get-TargetRect; if ($tr.L -ne $curRect.L -or $tr.T -ne $curRect.T -or $tr.R -ne $curRect.R -or $tr.B -ne $curRect.B) { Place-Splash $h $tr; $curRect = $tr }
         Start-Sleep -Milliseconds 100
       }
@@ -374,6 +387,7 @@ finally {
       if ([SplashWin]::IsIconic($c.MainWindowHandle)) { [SplashWin]::ShowWindow($c.MainWindowHandle, 9) | Out-Null }
       [SplashWin]::SetForegroundWindow($c.MainWindowHandle) | Out-Null
       Log 'Claude brought to front'
+      Log-ClaudeRect 'end'
     } else { Log 'Claude window not found at the end' }
   }
   # the browser profile is throw-away (Edge fills it with ~100 MB of metrics/models): delete it after every run, it is re-created on the next start

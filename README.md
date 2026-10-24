@@ -99,6 +99,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 | `splash window created (hidden until ready)` | 动画窗口已经出现，正在等页面准备好 |
 | `splash placed at ... source=...` | 动画盖到了哪里；`source` 见下面"动画位置不对" |
 | `splash shown (page ready after N s)` | 页面准备好了，动画开始播放 |
+| `found: Claude window at X,Y WxH zoomed=...` / `end: Claude window at ...` | Claude 窗口刚出现时、动画结束时的真实位置和大小（v1.1.1 起）；两行一样，说明启动器没有动过 Claude 的窗口 |
 | `page not ready after 8 s, giving up on the splash` | 页面超时没准备好，放弃动画，启动 Claude |
 | `hard timeout` | 动画窗口一直没出现，等到约 34 秒的硬超时 |
 | `safety net: starting Claude after the splash ended without starting it` | 动画流程结束时 Claude 还没启动，补启动了一次（v1.0.1 起） |
@@ -150,9 +151,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 | `source` | 含义 |
 |---|---|
 | `claude` | Claude 的窗口已经出现，直接对齐它 |
-| `claude-state` | 读的是 Claude 自己保存的 `window-state.json`（冷启动时） |
+| `claude-state` | 读的是 Claude 自己保存的 `window-state.json`（冷启动时）。这个文件在 `%LOCALAPPDATA%\Claude-Data\<包名>\`，较早的 Claude 版本放在 `%LOCALAPPDATA%\Packages\<包名>\LocalCache\Roaming\Claude\`，v1.1.1 起两处都会找，取最近写过的那个 |
 | `saved` | 读的是上次记住的位置 `launcher\last_rect.json` |
 | `screen` | 前面都读不到，盖住整个主屏幕 |
+
+如果日志里是 `saved`，而动画盖得明显不对（比如整屏）：说明读不到 `window-state.json`，退回到了很久以前记住的位置。v1.1.0 及以前只认较早 Claude 版本的存放位置，Claude 桌面端更新后搬了地方，就会这样；升级到 v1.1.1 即可。
 
 如果总是 `screen`：说明启动器找不到 Claude 的窗口，也没有记住过位置。目前代码只识别 Microsoft Store 版 Claude 的窗口和配置文件路径，别的安装方式找不到，是预期之内的（别的安装方式我没有验证过）。如果位置记错了，可以删掉 `launcher\last_rect.json`，它会在下次运行时重新记。
 
