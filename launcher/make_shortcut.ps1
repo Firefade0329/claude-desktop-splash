@@ -65,6 +65,7 @@ try {
   $pick = $found | Where-Object { $_.AppID -like 'Claude_*!*' } | Select-Object -First 1
   if (-not $pick) { $pick = $found | Select-Object -First 1 }
   if ($pick) { $aumid = $pick.AppID }
+  if ($pick -and $pick.AppID -notlike 'Claude_*!*') { Write-Warning ('The Start-menu entry called Claude is not the Microsoft Store app (' + $pick.AppID + '). The launcher looks for the Store app; the shortcut may not start Claude.') }
   if ($found.Count -gt 1) { Write-Warning ('More than one Start-menu entry is called Claude: ' + (($found | ForEach-Object { $_.AppID }) -join ' ; ') + ' -- using ' + $aumid) }
 } catch {}
 if (-not $aumid) {

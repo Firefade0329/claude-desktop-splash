@@ -29,7 +29,7 @@
 ### 读取的数据
 
 - **进程和窗口**：用 `Get-Process` 找名为 `claude` 的进程（并要求安装路径符合 Microsoft Store 版的位置）及其主窗口，用 Windows 接口读它的窗口位置和大小。
-- **Claude 自己保存的窗口位置**：读取 `%LOCALAPPDATA%\Packages\<Claude 的包名>\LocalCache\Roaming\Claude\window-state.json`，只取位置、大小、最大化状态和显示器范围。
+- **Claude 自己保存的窗口位置**：读取 `%LOCALAPPDATA%\Claude-Data\<Claude 的包名>\window-state.json`，较早的 Claude 版本放在 `%LOCALAPPDATA%\Packages\<Claude 的包名>\LocalCache\Roaming\Claude\window-state.json`，两处都找、取最近写过的那个。这是 Claude 自己的内部文件，启动器**只读不写**，只取位置、大小、最大化状态和显示器范围。
 - **开始菜单应用列表**：`make_shortcut.ps1` 用 `Get-StartApps` 查名为 "Claude" 的应用 ID。
 - **Claude 的图标**：`make_shortcut.ps1` 从你已安装的 Claude 里提取图标，存到本机的 `launcher\claude.ico`。
 - **进程命令行**：用 WMI（`Win32_Process`）读 Edge / Chrome 进程的命令行，只为了找到自己启动的那批、并在结束时清理。
@@ -37,7 +37,7 @@
 
 ### 写入的数据（都在你本机）
 
-- 仓库的 `launcher\` 文件夹里：`launcher.log`（运行日志，超过 100 KB 会被清空）、`last_rect.json`（上次记住的窗口位置）、`config.json`（Claude 的应用 ID）、`claude.ico`（图标）、`edge-profile\`（动画用的一次性 Edge 配置目录，每次运行结束时删除）。
+- 仓库的 `launcher\` 文件夹里：`launcher.log`（运行日志，超过 100 KB 会被清空）、`last_rect.json`（上次记住的窗口位置）、`config.json`（Claude 的应用 ID）、`claude.ico`（图标）、`edge-profile-<8 位十六进制>\`（动画用的一次性 Edge 配置目录，每次运行结束时删除）。
 - 快捷方式：仓库根目录里一个 `.lnk`；用 `-Desktop` 时桌面上再放一个。
 - **不写注册表、不创建启动项或计划任务**（脚本里没有这类操作）。
 - 日志里会有 Edge 的安装路径、Claude 的应用 ID、窗口坐标，出错时还有错误信息，不含对话内容；你分享日志之前请自己检查有没有不想公开的信息。
@@ -46,7 +46,7 @@
 
 - **快捷方式用 `-ExecutionPolicy Bypass` 运行脚本**：这会绕过 PowerShell 的执行策略。请只从可信的来源获取本仓库，并在运行前读一遍 `launcher\*.ps1`。
 - **启动 Claude**：通过 `explorer.exe shell:AppsFolder\<应用 ID>` 启动，应用 ID 来自 `launcher\config.json`（由 `make_shortcut.ps1` 写入）。如果有人能改写这个文件，就能让它启动另一个已安装的应用；但能改写你本机文件的人本来就有更大的权限。
-- **结束进程**：动画结束时，用 `Stop-Process -Force` 结束命令行里包含本仓库 `launcher\edge-profile` 路径的 Edge / Chrome 进程；不会按进程名结束你其它的浏览器窗口（这是读代码得出的结论，未验证）。
+- **结束进程**：在**启动时**（只在发现上次留下的 `edge-profile*` 目录时，清理上次被强行结束的残留）和**动画结束时**，用 `Stop-Process -Force` 结束命令行里包含本仓库 `launcher\edge-profile` 路径的 Edge / Chrome 进程；不会按进程名结束你其它的浏览器窗口（这是读代码得出的结论，未验证）。
 - **每次运行现场编译一小段 C#**（`Add-Type`），用来调用 Windows 的窗口接口（设置窗口位置、透明度、区域等）。
 - **Edge 启动参数**：没有使用 `--no-sandbox`，没有放宽本地文件的访问。
 
