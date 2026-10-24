@@ -22,7 +22,8 @@ Plays a short animation over the Claude desktop window when you start it from a 
 - 没有声音。
 - 播放中按 **Esc / 空格 / 回车**，或者**点击**，可以立即跳过。右下角有一个很淡的“跳过”提示。
 - 如果动画窗口出现后，页面 8 秒内没准备好，会自动放弃动画，只启动 Claude，不会卡住；如果动画窗口一直没出现，最长约 34 秒后才会启动 Claude。
-- 整个过程实测约 13 秒（从启动到关闭，其中约 2 秒是页面准备时间），实际取决于机器。
+- 从双击快捷方式到启动器结束，实测约 13–14 秒（`launcher.log` 里第一行 `launcher start` 到最后一行 `launcher end` 的时间差；其中动画本身约 9.3 秒，约 2 秒是页面准备时间，还包含 Claude 窗口出现和淡出、清理的时间），实际取决于机器。
+- **Claude 已经在运行时双击快捷方式，不会再播动画**：窗口开着的，直接带到前台；最小化的会还原；点了关闭、只留在系统托盘里的，会请它把窗口显示出来（和从开始菜单点它一样）。想看动画，需要先把 Claude **完全退出**（在托盘图标上右键退出）。判断依据是 Claude 桌面端的进程还在不在。
 - 欢迎语是固定的文字，想改可以直接改 `splash.html`。
 
 ## 要求
@@ -73,7 +74,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 - `launcher\launch.ps1` 用 Edge 的 `--app` 模式打开它，把窗口裁剪到刚好盖住 Claude 的窗口，并在后台启动 Claude；播完后淡出。
 - 冷启动时，窗口位置取自 Claude 自己保存的 `window-state.json`，读不到时才退回到上次记住的位置或整个屏幕。
 - 同一时间只运行一个启动器：快速连点两次快捷方式时，第二个只负责启动 Claude，不会去打断第一个。
-- 每次运行都用一个全新的临时 Edge 配置目录（`launcher\edge-profile-xxxxxxxx`，约 100 MB），播完就删。如果上一次的启动器被强行结束、没来得及清理，下一次启动时会自动清掉残留的动画窗口和配置目录。
+- 每次运行都用一个全新的临时 Edge 配置目录（`launcher\edge-profile-xxxxxxxx`，约 100 MB），播完就删。如果上一次的启动器被强行结束、没来得及清理，下一次启动时会自动清掉残留的动画窗口和配置目录（只有发现残留的配置目录时才会去查进程，平时不增加启动时间）。
 - 播完后，Claude 的窗口会被带到前台；只有它被最小化时才会还原，最大化的窗口不会被缩小。
 - 运行日志写在 `launcher\launcher.log`（不会上传到仓库）。
 
@@ -99,7 +100,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 | `splash window created (hidden until ready)` | 动画窗口已经出现，正在等页面准备好 |
 | `splash placed at ... source=...` | 动画盖到了哪里；`source` 见下面"动画位置不对" |
 | `splash shown (page ready after N s)` | 页面准备好了，动画开始播放 |
-| `found: Claude window at X,Y WxH zoomed=...` / `end: Claude window at ...` | Claude 窗口刚出现时、动画结束时的真实位置和大小（v1.1.1 起）；两行一样，说明启动器没有动过 Claude 的窗口 |
+| `Claude window appeared at X,Y WxH zoomed=...` | Claude 的窗口**第一次**被看到时的真实位置和大小（v1.1.2 起，在动画播放期间记录） |
+| `Claude window changed to ...` | 之后窗口的位置或大小变了（至多每秒一行）；用它可以分清是 Claude 自己改了窗口，还是别的原因 |
+| `after the splash: Claude window at ...` / `end: Claude window at ...` | 动画播完、启动器第一次在等待循环里看到 Claude 窗口时，和整个流程结束时的位置和大小。两行相差几十毫秒到一两秒，只能证明启动器收尾时没有动窗口，**不是**窗口刚出现的时刻（v1.1.1 的说明在这一点上写错了） |
+| `window-state: ...; last_rect: ...` | 动画放置时没有用到 Claude 的真实窗口（`source` 不是 `claude`），这一行说明为什么：`window-state.json` 找没找到、多久前写的、有没有匹配的显示器；`last_rect.json` 多旧（超过 14 天不再信任） |
+| `Claude is already running: no splash, bringing it to the front` | Claude 的窗口已经开着，没有播动画（v1.1.2 起） |
+| `Claude is running in the background (N processes, no window): no splash, asking it to show its window` | Claude 关到了托盘（进程还在、没有窗口），没有播动画，请它显示窗口（v1.1.2 起）；之后是 `Claude window is there, brought to the front`，或者 8 秒内没有窗口时的 `Claude showed no window within 8 s` |
+| `no Claude process at all: it did not start...` | 动画播完也没有任何 Claude 进程：多半是应用 ID 过期了，重新运行 `make_shortcut.ps1`（v1.1.2 起） |
+| `single-instance check not possible (...)` | 互斥体建不起来，继续运行（可能两个启动器同时跑，但 Claude 一定会启动） |
 | `page not ready after 8 s, giving up on the splash` | 页面超时没准备好，放弃动画，启动 Claude |
 | `hard timeout` | 动画窗口一直没出现，等到约 34 秒的硬超时 |
 | `safety net: starting Claude after the splash ended without starting it` | 动画流程结束时 Claude 还没启动，补启动了一次（v1.0.1 起） |
@@ -152,7 +160,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 |---|---|
 | `claude` | Claude 的窗口已经出现，直接对齐它 |
 | `claude-state` | 读的是 Claude 自己保存的 `window-state.json`（冷启动时）。这个文件在 `%LOCALAPPDATA%\Claude-Data\<包名>\`，较早的 Claude 版本放在 `%LOCALAPPDATA%\Packages\<包名>\LocalCache\Roaming\Claude\`，v1.1.1 起两处都会找，取最近写过的那个 |
-| `saved` | 读的是上次记住的位置 `launcher\last_rect.json` |
+| `saved` | 读的是上次记住的位置 `launcher\last_rect.json`（v1.1.2 起，超过 14 天没有更新的不再使用，改为整个屏幕） |
 | `screen` | 前面都读不到，盖住整个主屏幕 |
 
 如果日志里是 `saved`，而动画盖得明显不对（比如整屏）：说明读不到 `window-state.json`，退回到了很久以前记住的位置。v1.1.0 及以前只认较早 Claude 版本的存放位置，Claude 桌面端更新后搬了地方，就会这样；升级到 v1.1.1 即可。
@@ -165,7 +173,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 
 ### 动画窗口没有消失
 
-先点一下动画，或者按 Esc / 空格 / 回车（键盘按键在某些情况下可能收不到，我没有验证，点击更可靠）。仍然不消失时，可以在任务管理器里结束 Microsoft Edge 的进程——注意这也会关掉你自己正在用的 Edge 窗口。启动器被强行结束（任务管理器、关机等）时窗口可能残留，**再双击一次快捷方式就会自动清掉**（v1.1.0 起）。正常结束时，启动器会自动结束动画用的 Edge 并删除临时配置目录 `launcher\edge-profile\`（约 100 MB）；如果启动器被强行结束，这个目录可能残留，确认动画窗口已经关闭后可以手动删除（它是一次性的，运行时会重新创建）。
+先点一下动画就能跳过（右下角的提示写的是“点击跳过”）。Esc / 空格 / 回车在某些情况下可能收不到，我没有验证，所以不再作为提示。仍然不消失时，可以在任务管理器里结束 Microsoft Edge 的进程——注意这也会关掉你自己正在用的 Edge 窗口。启动器被强行结束（任务管理器、关机等）时窗口可能残留，**再双击一次快捷方式就会自动清掉**（v1.1.0 起）。正常结束时，启动器会自动结束动画用的 Edge 并删除临时配置目录 `launcher\edge-profile-<8 位十六进制>\`（约 100 MB）；如果启动器被强行结束，这个目录可能残留，确认动画窗口已经关闭后可以手动删除（它是一次性的，运行时会重新创建）。
 
 ## 卸载
 

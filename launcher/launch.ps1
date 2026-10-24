@@ -10,8 +10,11 @@
 
   Where does the splash go?
     1. Claude window already visible  -> its exact frame, and it follows if you move/resize it
-    2. otherwise (cold start)         -> the last remembered Claude window rectangle (last_rect.json)
+    2. otherwise (cold start)         -> Claude's own saved window position (window-state.json), then the last remembered
+                                         rectangle (last_rect.json, not used when it is older than 14 days)
     3. otherwise                      -> the whole primary screen
+  If Claude is already running (its window is visible or minimised, or it only sits in the tray) there is no splash at all:
+  Claude is just brought to the front (a hidden one is asked to show its window, like the Start menu does).
 
   Switches (for testing):
     -NoClaude         only play the splash, do not start Claude
@@ -41,6 +44,9 @@ $ErrorActionPreference = 'Continue'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $logFile = Join-Path $here 'launcher.log'
 $rectFile = Join-Path $here 'last_rect.json'
+$SavedMaxDays = 14      # an older remembered rectangle is not trusted (the person may have moved or resized Claude since)
+$script:stateWhy = ''
+$script:savedWhy = ''
 if ((Test-Path -LiteralPath $logFile) -and ((Get-Item -LiteralPath $logFile).Length -gt 100KB)) { Remove-Item -LiteralPath $logFile -ErrorAction SilentlyContinue }
 function Log([string]$m) { try { Add-Content -LiteralPath $logFile -Value ('{0:HH:mm:ss.fff} {1}' -f (Get-Date), $m) -Encoding UTF8 } catch {} }
 Log '--- launcher start'
@@ -142,10 +148,49 @@ function Stop-ProcessesUsing([string]$needle) {
 
 if ($NoSplash) { Start-ClaudeApp; return }
 
+# Claude is running already: a splash over something in use (or over an app that only has to come out of the tray) would only be in the way.
+# (Not with the test switches and hooks.)
+if (-not $NoClaude -and -not $Fullscreen -and -not $env:SPLASH_TRACK_PROC -and -not $env:SPLASH_TRACK_TITLE) {
+  function Show-ClaudeFront($c) {
+    if ([SplashWin]::IsIconic($c.MainWindowHandle)) { [SplashWin]::ShowWindow($c.MainWindowHandle, 9) | Out-Null }
+    [SplashWin]::SetForegroundWindow($c.MainWindowHandle) | Out-Null
+  }
+  $running = Get-ClaudeWindow
+  if ($running) {
+    Log 'Claude is already running: no splash, bringing it to the front'
+    Show-ClaudeFront $running
+    Log '--- launcher end'
+    return
+  }
+  # closed into the tray: the app is alive (its processes exist) but has no window; starting it again makes it show the window, as the Start menu does
+  $alive = @(Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '*WindowsApps*Claude_*' }).Count
+  if ($alive -gt 0) {
+    Log ('Claude is running in the background ({0} processes, no window): no splash, asking it to show its window' -f $alive)
+    Start-ClaudeApp
+    $w = Get-Date
+    while (((Get-Date) - $w).TotalSeconds -lt 8) {
+      $running = Get-ClaudeWindow
+      if ($running) { Show-ClaudeFront $running; Log 'Claude window is there, brought to the front'; break }
+      Start-Sleep -Milliseconds 150
+    }
+    if (-not $running) { Log 'Claude showed no window within 8 s' }
+    Log '--- launcher end'
+    return
+  }
+}
+
 # Only one launcher at a time: a second double-click would otherwise kill the first one's browser and delete its profile.
-$script:mutex = New-Object System.Threading.Mutex($false, 'Local\ClaudeDesktopSplashLauncher')
+$script:mutex = $null
 $hasMutex = $false
-try { $hasMutex = $script:mutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $hasMutex = $true }      # a killed earlier run: we own it now
+try {
+  $script:mutex = New-Object System.Threading.Mutex($false, 'Local\ClaudeDesktopSplashLauncher')
+  try { $hasMutex = $script:mutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $hasMutex = $true }      # a killed earlier run: we own it now
+} catch {
+  # no mutex at all (for example no right to open one that another account made): better two launchers than no Claude
+  Log ('single-instance check not possible (' + $_.Exception.GetType().Name + '), going on without it')
+  $hasMutex = $true
+  $script:mutex = $null
+}
 if (-not $hasMutex) { Log 'another splash launcher is already running: starting Claude only'; if (-not $NoClaude) { Start-ClaudeApp }; return }
 
 # ---- where should the splash go? ----
@@ -167,6 +212,7 @@ function Get-ClaudeStateRect {
   if (((Get-Date) - $script:stateAt).TotalMilliseconds -lt 1000) { return $script:stateRect }
   $script:stateAt = Get-Date
   $script:stateRect = $null
+  $script:stateWhy = 'not tried'
   try {
     $pkg = $aumid.Split('!')[0]
     # Claude keeps this file in its own data folder. The desktop update of October 2026 moved it from the package's LocalCache
@@ -175,10 +221,13 @@ function Get-ClaudeStateRect {
     foreach ($c in @((Join-Path $env:LOCALAPPDATA "Claude-Data\$pkg\window-state.json"), (Join-Path $env:LOCALAPPDATA "Packages\$pkg\LocalCache\Roaming\Claude\window-state.json"))) {
       if ((Test-Path -LiteralPath $c) -and (-not $f -or (Get-Item -LiteralPath $c).LastWriteTime -gt (Get-Item -LiteralPath $f).LastWriteTime)) { $f = $c }
     }
-    if (-not $f) { return $null }
+    if (-not $f) { $script:stateWhy = 'file not found in either place'; return $null }
+    $where = if ($f -like '*\Claude-Data\*') { 'Claude-Data' } else { 'Packages' }
+    $ageMin = [int]((Get-Date) - (Get-Item -LiteralPath $f).LastWriteTime).TotalMinutes
     $s = Get-Content -LiteralPath $f -Raw | ConvertFrom-Json
     $dw = [double]$s.displayBounds.width; $dh = [double]$s.displayBounds.height
-    if ($dw -lt 100 -or $dh -lt 100) { return $null }
+    if ($dw -lt 100 -or $dh -lt 100) { $script:stateWhy = ('unexpected format (' + $where + ')'); return $null }
+    $script:stateWhy = ('no display matches the saved one (' + $where + ')')
     foreach ($scr in [System.Windows.Forms.Screen]::AllScreens) {
       $k = $scr.Bounds.Width / $dw
       # same display: same scale in both directions and the same origin
@@ -191,7 +240,8 @@ function Get-ClaudeStateRect {
       }
       break
     }
-  } catch {}
+    if ($script:stateRect) { $script:stateWhy = ('ok (' + $where + ', written ' + $ageMin + ' min ago)') }
+  } catch { $script:stateWhy = ('could not be read (' + $_.Exception.GetType().Name + ')') }
   return $script:stateRect
 }
 function Log-ClaudeRect([string]$tag) {
@@ -201,6 +251,26 @@ function Log-ClaudeRect([string]$tag) {
     $r = New-Object SplashWin+RECT
     if ([SplashWin]::FrameRect($c.MainWindowHandle, [ref]$r)) { Log ('{0}: Claude window at {1},{2} {3}x{4} zoomed={5}' -f $tag, $r.L, $r.T, ($r.R - $r.L), ($r.B - $r.T), [SplashWin]::IsZoomed($c.MainWindowHandle)) }
   } catch {}
+}
+$script:claudeSeen = $false
+$script:noteKey = ''
+$script:noteAt = [DateTime]::MinValue
+function Note-ClaudeRect($tr) {
+  # the real window only (source 'claude'); the first time it is seen, then every change, at most once a second
+  if ($tr.Source -ne 'claude') { return }
+  $k = '{0},{1} {2}x{3} zoomed={4}' -f $tr.L, $tr.T, ($tr.R - $tr.L), ($tr.B - $tr.T), $tr.Zoomed
+  if (-not $script:claudeSeen) { $script:claudeSeen = $true; $script:noteKey = $k; $script:noteAt = Get-Date; Log ('Claude window appeared at ' + $k); return }
+  if ($k -ne $script:noteKey -and ((Get-Date) - $script:noteAt).TotalMilliseconds -ge 1000) { $script:noteKey = $k; $script:noteAt = Get-Date; Log ('Claude window changed to ' + $k) }
+}
+function Probe-ClaudeAppear {
+  # before the splash has been placed nothing asks for the target: look for the new window here, so the first sighting is logged when it happens
+  if ($script:claudeSeen) { return }
+  $c = Get-ClaudeWindow
+  if (-not $c) { return }
+  $r = New-Object SplashWin+RECT
+  if ([SplashWin]::FrameRect($c.MainWindowHandle, [ref]$r) -and (($r.R - $r.L) -ge 300) -and (($r.B - $r.T) -ge 200)) {
+    Note-ClaudeRect @{ L = $r.L; T = $r.T; R = $r.R; B = $r.B; Zoomed = [SplashWin]::IsZoomed($c.MainWindowHandle); Source = 'claude' }
+  }
 }
 function Get-TargetRect {
   # returns @{ L; T; R; B; Zoomed; Source }
@@ -219,6 +289,9 @@ function Get-TargetRect {
     }
     if (-not $env:SPLASH_TRACK_TITLE -and -not $env:SPLASH_TRACK_PROC) { $st = Get-ClaudeStateRect; if ($st) { return $st } }
     try {
+      $ageDays = ((Get-Date) - (Get-Item -LiteralPath $rectFile).LastWriteTime).TotalDays
+      if ($ageDays -gt $SavedMaxDays) { $script:savedWhy = ('ignored, written {0:N0} days ago' -f $ageDays); throw 'remembered rectangle too old' }
+      $script:savedWhy = ('written {0:N1} days ago' -f $ageDays)
       $s = Get-Content -LiteralPath $rectFile -Raw | ConvertFrom-Json
       $vs = [System.Windows.Forms.SystemInformation]::VirtualScreen
       $w = $s.r - $s.l; $h = $s.b - $s.t
@@ -245,9 +318,12 @@ if ($env:SPLASH_DEBUG) { $url += '&dbg' }                  # test hook: the page
 $prof = Join-Path $here ('edge-profile-' + [guid]::NewGuid().ToString('N').Substring(0, 8))      # a new folder every run
 # Whatever an earlier run left behind (it was killed before it could clean up): its browser window, then its profile folder.
 # We hold the mutex, so no other launcher is running, and nothing of ours is alive.
-Stop-ProcessesUsing (Join-Path $here 'edge-profile')
-Start-Sleep -Milliseconds 300
-Get-ChildItem -LiteralPath $here -Directory -Filter 'edge-profile*' -ErrorAction SilentlyContinue | ForEach-Object { try { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction Stop; Log ('removed a leftover profile folder: ' + $_.Name) } catch { Log ('could not remove a leftover profile folder: ' + $_.Name) } }
+$leftovers = @(Get-ChildItem -LiteralPath $here -Directory -Filter 'edge-profile*' -ErrorAction SilentlyContinue)
+if ($leftovers.Count -gt 0) {      # (nothing left behind in nearly every run: then there is nothing to wait for or to look up)
+  Stop-ProcessesUsing (Join-Path $here 'edge-profile')
+  Start-Sleep -Milliseconds 300
+  $leftovers | ForEach-Object { try { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction Stop; Log ('removed a leftover profile folder: ' + $_.Name) } catch { Log ('could not remove a leftover profile folder: ' + $_.Name) } }
+}
 $edgeArgs = @(
   "--app=$url",
   '--window-position=-32000,-32000', '--window-size=800,600',      # born off-screen so it never flashes at a default position
@@ -311,9 +387,11 @@ try {
       if (-not $placed -and $title -match 'CLAUDE_SPLASH_(READY|PLAYING)') {
         if ($title -match 'nc=(\d+)') { $nc = [int]$Matches[1] }
         $curRect = Get-TargetRect
+        Note-ClaudeRect $curRect
         Place-Splash $h $curRect
         $placed = $true
         Log ("splash placed at {0},{1} {2}x{3} nc={4} source={5} (still invisible)" -f $curRect.L, $curRect.T, ($curRect.R - $curRect.L), ($curRect.B - $curRect.T), $nc, $curRect.Source)
+        if ($curRect.Source -ne 'claude') { Log ('window-state: ' + $script:stateWhy + '; last_rect: ' + $(if ($script:savedWhy) { $script:savedWhy } else { 'not looked at' })) }
         # Chromium keeps a resize frame even without WS_THICKFRAME: the client area is smaller than the window.
         # Measure it and grow the window by that much so the visible area ends up exactly on the target rectangle.
         Start-Sleep -Milliseconds 250
@@ -339,6 +417,7 @@ try {
       if ($placed) {
         # follow the Claude window; keep on top
         $tr = Get-TargetRect
+        Note-ClaudeRect $tr
         if ($tr.L -ne $curRect.L -or $tr.T -ne $curRect.T -or $tr.R -ne $curRect.R -or $tr.B -ne $curRect.B -or $tr.Zoomed -ne $curRect.Zoomed) { Place-Splash $h $tr; $curRect = $tr }
         else { [SplashWin]::SetWindowPos($h, [IntPtr](-1), 0, 0, 0, 0, 0x0013) | Out-Null }       # NOMOVE|NOSIZE|NOACTIVATE
         if ($shown -and $title -like '*CLAUDE_SPLASH_DONE*') { Log 'splash reported DONE'; $done = $true }
@@ -349,6 +428,7 @@ try {
       if ($appearAt -and -not $shown -and (((Get-Date) - $appearAt).TotalSeconds -gt $ReadyTimeoutSec)) { Log ("page not ready after {0} s, giving up on the splash" -f $ReadyTimeoutSec); if (-not $claudeStarted -and -not $NoClaude) { $claudeStarted = $true; Start-ClaudeApp }; break }
     }
     if (-not $claudeStarted -and -not $NoClaude -and $appearAt -and (((Get-Date) - $appearAt).TotalMilliseconds -ge $ClaudeDelayMs)) { $claudeStarted = $true; Start-ClaudeApp }
+    if ($claudeStarted) { Probe-ClaudeAppear }
     if (((Get-Date) - $t0).TotalSeconds -gt ($MaxSplashSec + 12)) { Log 'hard timeout'; break }
     if ($setup) { Start-Sleep -Milliseconds 30 } else { Start-Sleep -Milliseconds 3 }     # catch the new window as early as possible
   }
@@ -359,7 +439,7 @@ try {
       if (-not $claudeStarted) { $claudeStarted = $true; Start-ClaudeApp }
       $w = Get-Date
       while (((Get-Date) - $w).TotalSeconds -lt 8) {
-        if (Get-ClaudeWindow) { Log 'Claude window found'; Log-ClaudeRect 'found'; break }
+        if (Get-ClaudeWindow) { Log 'Claude window found'; Log-ClaudeRect 'after the splash'; break }
         $tr = Get-TargetRect; if ($tr.L -ne $curRect.L -or $tr.T -ne $curRect.T -or $tr.R -ne $curRect.R -or $tr.B -ne $curRect.B) { Place-Splash $h $tr; $curRect = $tr }
         Start-Sleep -Milliseconds 100
       }
@@ -369,10 +449,11 @@ try {
     while ($sw.ElapsedMilliseconds -lt $FadeMs) {
       $a = [int][Math]::Max(0, 255 * (1 - ($sw.ElapsedMilliseconds / $FadeMs)))
       [SplashWin]::SetLayeredWindowAttributes($h, 0, [byte]$a, 2) | Out-Null
-      $tr = Get-TargetRect; if ($tr.L -ne $curRect.L -or $tr.T -ne $curRect.T -or $tr.R -ne $curRect.R -or $tr.B -ne $curRect.B) { Place-Splash $h $tr; $curRect = $tr }
+      $tr = Get-TargetRect; Note-ClaudeRect $tr; if ($tr.L -ne $curRect.L -or $tr.T -ne $curRect.T -or $tr.R -ne $curRect.R -or $tr.B -ne $curRect.B) { Place-Splash $h $tr; $curRect = $tr }
       Start-Sleep -Milliseconds 16
     }
     Log 'fade finished'
+    try { [SplashWin]::ShowWindow($h, 0) | Out-Null } catch {}      # hidden at once: a faded-out window that is still there would take the first click meant for Claude
   }
 }
 finally {
@@ -388,7 +469,11 @@ finally {
       [SplashWin]::SetForegroundWindow($c.MainWindowHandle) | Out-Null
       Log 'Claude brought to front'
       Log-ClaudeRect 'end'
-    } else { Log 'Claude window not found at the end' }
+    } else {
+      Log ('Claude window not found at the end (app id ' + $aumid + ')')
+      $procs = @(Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '*WindowsApps*Claude_*' }).Count
+      if ($procs -eq 0) { Log 'no Claude process at all: it did not start. Is the app id above still right? (run make_shortcut.ps1 again to look it up)' }
+    }
   }
   # the browser profile is throw-away (Edge fills it with ~100 MB of metrics/models): delete it after every run, it is re-created on the next start
   # (Edge's helper processes can take a moment to let go of their files, especially when the machine is busy: retry)

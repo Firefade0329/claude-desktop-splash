@@ -46,7 +46,7 @@
 
 ### 不要提交的文件
 
-这些文件由脚本在你本机生成，已经写在 `.gitignore` 里：`launcher/launcher.log`、`launcher/last_rect.json`、`launcher/config.json`、`launcher/claude.ico`、`launcher/edge-profile/`、`*.lnk`。
+这些文件由脚本在你本机生成，已经写在 `.gitignore` 里：`launcher/launcher.log`、`launcher/last_rect.json`、`launcher/config.json`、`launcher/claude.ico`、`launcher/edge-profile*/`、`*.lnk`。
 
 其中 `claude.ico` 是 Claude 应用的官方图标，属于商标素材，**绝对不要加入仓库**。
 
