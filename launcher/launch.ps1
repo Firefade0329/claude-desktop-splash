@@ -153,7 +153,7 @@ if ($NoSplash) { Start-ClaudeApp; return }
 if (-not $NoClaude -and -not $Fullscreen -and -not $env:SPLASH_TRACK_PROC -and -not $env:SPLASH_TRACK_TITLE) {
   function Show-ClaudeFront($c) {
     if ([SplashWin]::IsIconic($c.MainWindowHandle)) { [SplashWin]::ShowWindow($c.MainWindowHandle, 9) | Out-Null }
-    [SplashWin]::SetForegroundWindow($c.MainWindowHandle) | Out-Null
+    if (-not [SplashWin]::SetForegroundWindow($c.MainWindowHandle)) { Log 'Windows did not let the launcher move the focus to Claude (its taskbar icon may flash instead)' }
   }
   $running = Get-ClaudeWindow
   if ($running) {
@@ -218,12 +218,16 @@ function Get-ClaudeStateRect {
     # Claude keeps this file in its own data folder. The desktop update of October 2026 moved it from the package's LocalCache
     # to Local\Claude-Data\<package>: look in both places and take the one written most recently.
     $f = $null
+    $fTime = $null
     foreach ($c in @((Join-Path $env:LOCALAPPDATA "Claude-Data\$pkg\window-state.json"), (Join-Path $env:LOCALAPPDATA "Packages\$pkg\LocalCache\Roaming\Claude\window-state.json"))) {
-      if ((Test-Path -LiteralPath $c) -and (-not $f -or (Get-Item -LiteralPath $c).LastWriteTime -gt (Get-Item -LiteralPath $f).LastWriteTime)) { $f = $c }
+      if (-not (Test-Path -LiteralPath $c)) { continue }
+      $ct = (Get-Item -LiteralPath $c).LastWriteTime
+      if ($ct -gt (Get-Date)) { $ct = Get-Date }      # a time in the future (clock set back) counts as "now", not as newer than everything
+      if (-not $f -or $ct -gt $fTime) { $f = $c; $fTime = $ct }
     }
     if (-not $f) { $script:stateWhy = 'file not found in either place'; return $null }
     $where = if ($f -like '*\Claude-Data\*') { 'Claude-Data' } else { 'Packages' }
-    $ageMin = [int]((Get-Date) - (Get-Item -LiteralPath $f).LastWriteTime).TotalMinutes
+    $ageMin = [int][Math]::Max(0, ((Get-Date) - (Get-Item -LiteralPath $f).LastWriteTime).TotalMinutes)
     $s = Get-Content -LiteralPath $f -Raw | ConvertFrom-Json
     $dw = [double]$s.displayBounds.width; $dh = [double]$s.displayBounds.height
     if ($dw -lt 100 -or $dh -lt 100) { $script:stateWhy = ('unexpected format (' + $where + ')'); return $null }
@@ -289,7 +293,9 @@ function Get-TargetRect {
     }
     if (-not $env:SPLASH_TRACK_TITLE -and -not $env:SPLASH_TRACK_PROC) { $st = Get-ClaudeStateRect; if ($st) { return $st } }
     try {
+      $script:savedWhy = 'file missing or unreadable'
       $ageDays = ((Get-Date) - (Get-Item -LiteralPath $rectFile).LastWriteTime).TotalDays
+      if ($ageDays -lt -1) { $script:savedWhy = 'ignored, its time is in the future (clock set back?)'; throw 'remembered rectangle is from the future' }
       if ($ageDays -gt $SavedMaxDays) { $script:savedWhy = ('ignored, written {0:N0} days ago' -f $ageDays); throw 'remembered rectangle too old' }
       $script:savedWhy = ('written {0:N1} days ago' -f $ageDays)
       $s = Get-Content -LiteralPath $rectFile -Raw | ConvertFrom-Json
@@ -391,7 +397,7 @@ try {
         Place-Splash $h $curRect
         $placed = $true
         Log ("splash placed at {0},{1} {2}x{3} nc={4} source={5} (still invisible)" -f $curRect.L, $curRect.T, ($curRect.R - $curRect.L), ($curRect.B - $curRect.T), $nc, $curRect.Source)
-        if ($curRect.Source -ne 'claude') { Log ('window-state: ' + $script:stateWhy + '; last_rect: ' + $(if ($script:savedWhy) { $script:savedWhy } else { 'not looked at' })) }
+        if ($curRect.Source -ne 'claude') { Log ('window-state: ' + $script:stateWhy + '; last_rect: ' + $(if ($script:savedWhy) { $script:savedWhy } else { 'not needed' })) }
         # Chromium keeps a resize frame even without WS_THICKFRAME: the client area is smaller than the window.
         # Measure it and grow the window by that much so the visible area ends up exactly on the target rectangle.
         Start-Sleep -Milliseconds 250
@@ -466,8 +472,7 @@ finally {
     $c = Get-ClaudeWindow
     if ($c) {
       if ([SplashWin]::IsIconic($c.MainWindowHandle)) { [SplashWin]::ShowWindow($c.MainWindowHandle, 9) | Out-Null }
-      [SplashWin]::SetForegroundWindow($c.MainWindowHandle) | Out-Null
-      Log 'Claude brought to front'
+      if ([SplashWin]::SetForegroundWindow($c.MainWindowHandle)) { Log 'Claude brought to front' } else { Log 'Windows did not let the launcher move the focus to Claude (its taskbar icon may flash instead)' }
       Log-ClaudeRect 'end'
     } else {
       Log ('Claude window not found at the end (app id ' + $aumid + ')')
