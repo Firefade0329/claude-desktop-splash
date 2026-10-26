@@ -20,7 +20,7 @@ Plays a short animation over the Claude desktop window when you start it from a 
 
 - 动画窗口会精确盖住 Claude 的窗口，并且跟着它移动、缩放。
 - 没有声音。
-- 播放中按 **Esc / 空格 / 回车**，或者**点击**，可以立即跳过。右下角有一个很淡的“跳过”提示。
+- 播放中**点击**动画可以立即跳过，右下角的提示写的是“点击跳过”。Esc / 空格 / 回车不保证有效：启动器不让动画窗口获得焦点，按键多半送给了 Claude。
 - 如果动画窗口出现后，页面 8 秒内没准备好，会自动放弃动画，只启动 Claude，不会卡住；如果动画窗口一直没出现，最长约 34 秒后才会启动 Claude。
 - 从双击快捷方式到启动器结束，实测约 13–14 秒（`launcher.log` 里第一行 `launcher start` 到最后一行 `launcher end` 的时间差；其中动画本身约 9.3 秒，约 2 秒是页面准备时间，还包含 Claude 窗口出现和淡出、清理的时间），实际取决于机器。
 - **Claude 已经在运行时双击快捷方式，不会再播动画**：窗口开着的，直接带到前台；最小化的会还原；点了关闭、只留在系统托盘里的，会请它把窗口显示出来（和从开始菜单点它一样）。想看动画，需要先把 Claude **完全退出**（在托盘图标上右键退出）。判断依据是 Claude 桌面端的进程还在不在。
@@ -113,7 +113,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 | `safety net: starting Claude after the splash ended without starting it` | 动画流程结束时 Claude 还没启动，补启动了一次（v1.0.1 起） |
 | `Claude window not found at the end` | 播完后没有找到 Claude 的窗口（所以没有把它置前） |
 | `profile cleanup incomplete: ...` | 动画用的临时 Edge 配置目录没删干净 |
-| `another splash launcher is already running: starting Claude only` | 已经有一个启动器在运行（比如连点了两次快捷方式），这一个只启动 Claude（v1.1.0 起） |
+| `another splash launcher is already running: starting Claude only` | 已经有一个启动器在运行，这一个只启动 Claude（v1.1.0 起）。快速连点两次时，第二个多半先碰到“Claude 已经在运行”（Claude 的窗口出现之后）；只有最初窗口还没出现的几秒里才是这一条 |
 | `removed a leftover profile folder: edge-profile-...` | 清掉了上一次被强行结束的运行留下的配置目录（v1.1.0 起） |
 | `could not remove a leftover profile folder: ...` | 上一次留下的配置目录删不掉（被占用或没有权限），可以手动删除 `launcher\edge-profile-*`（v1.1.0 起） |
 
@@ -160,7 +160,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 |---|---|
 | `claude` | Claude 的窗口已经出现，直接对齐它 |
 | `claude-state` | 读的是 Claude 自己保存的 `window-state.json`（冷启动时）。这个文件在 `%LOCALAPPDATA%\Claude-Data\<包名>\`，较早的 Claude 版本放在 `%LOCALAPPDATA%\Packages\<包名>\LocalCache\Roaming\Claude\`，v1.1.1 起两处都会找，取最近写过的那个 |
-| `saved` | 读的是上次记住的位置 `launcher\last_rect.json`（v1.1.2 起，超过 14 天没有更新的不再使用，改为整个屏幕） |
+| `saved` | 读的是上次记住的位置 `launcher\last_rect.json`（v1.1.2 起，超过 14 天没有更新、或者修改时间在未来的不再使用，改为整个屏幕）。注意这个文件记的是动画开头几秒时 Claude 的位置，之后你移动或缩放窗口它不会更新，天天用快捷方式的人它总是“新”的；所以它只是读不到 `window-state.json` 时的备选，真正的依据是 `window-state.json` |
 | `screen` | 前面都读不到，盖住整个主屏幕 |
 
 如果日志里是 `saved`，而动画盖得明显不对（比如整屏）：说明读不到 `window-state.json`，退回到了很久以前记住的位置。v1.1.0 及以前只认较早 Claude 版本的存放位置，Claude 桌面端更新后搬了地方，就会这样；升级到 v1.1.1 即可。
