@@ -10,10 +10,12 @@
 
 ## 目录
 
-- `splash.html`：动画本体（Canvas）。运行时只依赖 `assets/` 里的两个数据文件。
-- `assets/claude-closed.js`、`assets/eyes-frames.js`：由维护者本机的素材生成的内嵌图片数据（base64），**不要手改，也不要重新生成**。
+- `splash.html`：动画本体（Canvas）。运行时只依赖 `assets/` 里的数据文件。
+- `assets/claude-closed.js`（闭眼底图）、`assets/eyes-frames.js`（`window.EYE_SEQ`：31 帧睁眼序列）：由维护者本机的素材生成的内嵌图片数据（base64），**不要手改，也不要重新生成**。
+- `assets/sound.js`：开屏音效（Ogg/Opus，base64），由 `tools/make_sound.py` 合成。`assets/icon.png`、`launcher/custom.ico`：页面图标和快捷方式图标。
+- `tools/make_sound.py`：音效生成脚本（Python + numpy，输出 wav；转成 Ogg 并写进 `assets/sound.js` 需要 ffmpeg）。
 - `launcher/launch.ps1`：启动器。用 Edge `--app` 模式开窗口，裁剪到刚好盖住 Claude 的窗口，并在后台启动 Claude。
-- `launcher/make_shortcut.ps1`：生成快捷方式；同时写入 `config.json`（Claude 的应用 ID）和 `claude.ico`（从用户已安装的 Claude 里提取的图标）。
+- `launcher/make_shortcut.ps1`：生成快捷方式；同时写入 `config.json`（Claude 的应用 ID）和 `claude.ico`（从用户已安装的 Claude 里提取的图标）。有 `launcher/custom.ico` 时快捷方式用它做图标。
 - `docs/`：README 用的截图。
 - `README.md`、`LICENSE`、`.gitignore`
 
@@ -32,12 +34,12 @@
 
 - 绝不写入真实姓名、邮箱、本机路径（如盘符、用户目录）、令牌、密码。
 - 不上传任何第三方的参考图或截图；README 截图只能用本项目动画自己的画面，并且要去掉 EXIF 元数据。
-- 提交作者使用 GitHub 的 noreply 邮箱，作者名为 Firefade0329。
+- 提交作者使用 GitHub 的 noreply 邮箱，作者名为 Inanis404。
 - 提交信息末尾带 `Co-Authored-By: Claude <noreply@anthropic.com>` 署名行。
 
 ## 更新记录
 
-版本记录在 `CHANGELOG.md`（当前 1.1.3）。每次更新同时：在 CHANGELOG 里加一节，打 `vX.Y.Z` 标签，并用 `gh release create` 发布说明；这些由维护者确认后再做，云端不要自己打标签或发 Release。
+版本记录在 `CHANGELOG.md`（当前 1.2.0）。每次更新同时：在 CHANGELOG 里加一节，打 `vX.Y.Z` 标签，并用 `gh release create` 发布说明；这些由维护者确认后再做，云端不要自己打标签或发 Release。
 
 ## 和用户沟通
 

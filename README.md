@@ -1,6 +1,6 @@
 # Claude Desktop Splash — a startup animation for the Claude desktop app (Windows)
 
-Plays a short animation over the Claude desktop window when you start it from a shortcut, then fades out to reveal Claude. No sound. Skip any time with Esc, Space, Enter or a click.
+Plays a short animation over the Claude desktop window when you start it from a shortcut, then fades out to reveal Claude. With a short startup sound (add -NoSound to turn it off). Skip any time with Esc, Space, Enter or a click.
 
 > **Language note:** the animation's text is **Chinese (简体中文)**. **Windows only**; it needs Microsoft Edge and the Claude desktop app (Microsoft Store version). This is an unofficial personal project and is not affiliated with Anthropic.
 
@@ -19,7 +19,7 @@ Plays a short animation over the Claude desktop window when you start it from a 
 一个给 Claude 桌面应用加的开屏动画。你双击快捷方式，动画会盖在 Claude 的窗口上播放，同时在后台启动 Claude，播完后淡出，露出 Claude。
 
 - 动画窗口会精确盖住 Claude 的窗口，并且跟着它移动、缩放。
-- 没有声音。
+- 有一段约 9.6 秒的开屏音效（原创合成，和动画时间轴对齐，跳过时淡出）。不想要声音：给 `launch.ps1` 加 `-NoSound`。
 - 播放中**点击**动画可以立即跳过，右下角的提示写的是“点击跳过”。Esc / 空格 / 回车不保证有效：启动器不让动画窗口获得焦点，按键多半送给了 Claude。
 - 如果动画窗口出现后，页面 8 秒内没准备好，会自动放弃动画，只启动 Claude，不会卡住；如果动画窗口一直没出现，最长约 34 秒后才会启动 Claude。
 - 从双击快捷方式到启动器结束，实测约 13–14 秒（`launcher.log` 里第一行 `launcher start` 到最后一行 `launcher end` 的时间差；其中动画本身约 9.3 秒，约 2 秒是页面准备时间，还包含 Claude 窗口出现和淡出、清理的时间），实际取决于机器。
@@ -45,7 +45,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\make_shortcut.ps1
 
 这个脚本会做三件事：
 - 查出你电脑上 Claude 的应用 ID，存进 `launcher\config.json`；
-- 从你已经安装的 Claude 里提取图标，存进 `launcher\claude.ico`（只在你自己的电脑上生成，不包含在仓库里）；
+- 快捷方式的图标用仓库里的 `launcher\custom.ico`（角色头像）；没有这个文件时，从你已经安装的 Claude 里提取图标，存进 `launcher\claude.ico`（只在你自己的电脑上生成，不包含在仓库里）；
 - 生成快捷方式（用 `conhost --headless` 启动 PowerShell，避免启动时闪一下黑色窗口）。
 
 ## 常用选项（调试用）
@@ -57,6 +57,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\make_shortcut.ps1
 | `-NoClaude` | 只播动画，不启动 Claude |
 | `-NoSplash` | 只启动 Claude，不播动画 |
 | `-Fullscreen` | 忽略 Claude 的窗口，盖住整个主屏幕 |
+| `-NoSound` | 不播放开屏音效 |
 | `-ClaudeDelayMs N` | 动画出现 N 毫秒后再启动 Claude（默认 800） |
 | `-FadeMs N` / `-FadeInMs N` | 淡出 / 淡入时长（默认 800 / 250 毫秒） |
 | `-ReadyTimeoutSec N` | 动画窗口出现后，页面多久没准备好就放弃动画（默认 8 秒） |
@@ -70,7 +71,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 
 ## 它是怎么工作的（简述）
 
-- `splash.html` 是动画本身（Canvas 绘制的网页）。
+- `splash.html` 是动画本身（Canvas 绘制的网页）。图片和音效都内嵌在 `assets\` 的几个 `.js` 数据文件里：闭眼底图、睁眼序列（31 帧，只有眼睑在动，眼珠不动）、音效（Ogg/Opus）、页面图标。
+- 音效用 Web Audio 播放；启动器给 Edge 加了 `--autoplay-policy=no-user-gesture-required`，所以不用先点一下就能出声。音效 1.5 秒内没解码好就先静音播放，不会耽误动画。
 - `launcher\launch.ps1` 用 Edge 的 `--app` 模式打开它，把窗口裁剪到刚好盖住 Claude 的窗口，并在后台启动 Claude；播完后淡出。
 - 冷启动时，窗口位置取自 Claude 自己保存的 `window-state.json`，读不到时才退回到上次记住的位置或整个屏幕。
 - 同一时间只运行一个启动器：快速连点两次快捷方式时，第二个只负责启动 Claude，不会去打断第一个。
@@ -198,6 +200,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 ## 许可 / License
 
 - **代码**：[MIT License](LICENSE)，Copyright (c) 2026 Firefade0329。
-- **图片**（`assets\` 里内嵌的角色图）：由 AI 工具生成，**不在 MIT 协议的授权范围内**，版权和使用许可另行说明。如需在本项目之外使用这些图片，请先联系作者。
+- **图片**（`assets\` 里内嵌的角色图，以及图标 `assets\icon.png`、`launcher\custom.ico`）：**不在 MIT 协议的授权范围内**，版权和使用许可另行说明。角色图由 AI 工具生成。如需在本项目之外使用这些图片，请先联系作者。
+- **音效**（`assets\sound.js`）：由 `tools\make_sound.py` 用代码合成，没有使用任何音频素材，和代码一样按 MIT 协议。
 
-*Code is MIT-licensed. The character images embedded in `assets\` are AI-generated and are not covered by the MIT license; contact the author before reusing them elsewhere.*
+*Code (and the code-synthesized startup sound) is MIT-licensed. The character images and icons (`assets\`, `launcher\custom.ico`) are not covered by the MIT license; contact the author before reusing them elsewhere.*

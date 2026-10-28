@@ -23,7 +23,7 @@
 
 ### 联网
 
-- **脚本和页面本身不联网**：两个 PowerShell 脚本里没有任何下载或网络请求的命令；`splash.html` 只加载仓库里的两个本地数据文件（`assets/*.js`），页面里没有网络请求，数据文件里也没有 `http(s)` 地址。
+- **脚本和页面本身不联网**：两个 PowerShell 脚本里没有任何下载或网络请求的命令；`splash.html` 只加载仓库里的本地数据文件（`assets/*.js` 和页面图标 `assets/icon.png`），页面里没有网络请求，数据文件里也没有 `http(s)` 地址。
 - **Edge 自己可能联网（未验证）**：动画用 Edge（或 Chrome）的应用窗口播放。启动参数里有 `--disable-background-networking`、`--disable-sync`，并且使用独立的临时配置目录；但我没法确认 Edge 在这种模式下是否完全不发起任何网络请求。
 
 ### 读取的数据
@@ -31,7 +31,8 @@
 - **进程和窗口**：用 `Get-Process` 找名为 `claude` 的进程（并要求安装路径符合 Microsoft Store 版的位置）及其主窗口，用 Windows 接口读它的窗口位置和大小。
 - **Claude 自己保存的窗口位置**：读取 `%LOCALAPPDATA%\Claude-Data\<Claude 的包名>\window-state.json`，较早的 Claude 版本放在 `%LOCALAPPDATA%\Packages\<Claude 的包名>\LocalCache\Roaming\Claude\window-state.json`，两处都找、取最近写过的那个。这是 Claude 自己的内部文件，启动器**只读不写**，只取位置、大小、最大化状态和显示器范围。
 - **开始菜单应用列表**：`make_shortcut.ps1` 用 `Get-StartApps` 查名为 "Claude" 的应用 ID。
-- **Claude 的图标**：`make_shortcut.ps1` 从你已安装的 Claude 里提取图标，存到本机的 `launcher\claude.ico`。
+- **Claude 的图标**：`make_shortcut.ps1` 从你已安装的 Claude 里提取图标，存到本机的 `launcher\claude.ico`（仓库里有 `launcher\custom.ico` 时，快捷方式用后者做图标）。
+- **声音**：页面用 Web Audio 播放内嵌的音效；启动器给这个一次性的 Edge 窗口加了 `--autoplay-policy=no-user-gesture-required`，只影响这个临时配置目录里的窗口，不影响你自己的 Edge。`-NoSound` 可以关掉。
 - **进程命令行**：用 WMI（`Win32_Process`）读 Edge / Chrome 进程的命令行，只为了找到自己启动的那批、并在结束时清理。
 - **仓库里的文件**：`splash.html`、`assets/*.js`、`launcher\config.json`、`launcher\last_rect.json`。
 

@@ -94,6 +94,7 @@ function New-Link([string]$dir) {
   $ps = Join-Path $env:SystemRoot 'System32\conhost.exe'
   $arg = '--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $here 'launch.ps1') + '"'
   $ico = ''; if (Test-Path -LiteralPath $icoPath) { $ico = $icoPath }
+  $custom = Join-Path $here 'custom.ico'; if (Test-Path -LiteralPath $custom) { $ico = $custom }   # launcher\custom.ico overrides the Claude icon
   [LinkMaker]::Create($lnk, $ps, $arg, $here, $ico, 'Claude with startup animation', 7)
   Write-Output "shortcut = $lnk"
 }
