@@ -2,12 +2,14 @@
   Creates the splash shortcut.
     -LinkName  file name of the shortcut (without .lnk)
     -Desktop   also copy it to the real Desktop folder
+    -Art       new (default) | classic  -- which artwork the shortcut plays
   Also resolves Claude's AppUserModelID into config.json and extracts Claude's icon into claude.ico.
   Note: the shortcut is written through IShellLink (Unicode). WScript.Shell cannot handle non-ANSI paths.
 #>
 param(
   [string]$LinkName = 'Claude (splash)',
-  [switch]$Desktop
+  [switch]$Desktop,
+  [ValidateSet('new','classic')][string]$Art = 'new'
 )
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -93,6 +95,7 @@ function New-Link([string]$dir) {
   # conhost --headless runs PowerShell without ever creating a console window (-WindowStyle Hidden still flashes one)
   $ps = Join-Path $env:SystemRoot 'System32\conhost.exe'
   $arg = '--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $here 'launch.ps1') + '"'
+  if ($Art -eq 'classic') { $arg += ' -Art classic' }      # bake the artwork choice into the shortcut
   $ico = ''; if (Test-Path -LiteralPath $icoPath) { $ico = $icoPath }
   $custom = Join-Path $here 'custom.ico'; if (Test-Path -LiteralPath $custom) { $ico = $custom }   # launcher\custom.ico overrides the Claude icon
   [LinkMaker]::Create($lnk, $ps, $arg, $here, $ico, 'Claude with startup animation', 7)

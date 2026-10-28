@@ -12,6 +12,7 @@
 
 - `splash.html`：动画本体（Canvas）。运行时只依赖 `assets/` 里的数据文件。
 - `assets/claude-closed.js`（闭眼底图）、`assets/eyes-frames.js`（`window.EYE_SEQ`：31 帧睁眼序列）：由维护者本机的素材生成的内嵌图片数据（base64），**不要手改，也不要重新生成**。
+- `assets/classic/claude-closed.js`、`assets/classic/eyes-frames.js`：原来那套角色图（v1.1.3 及以前的，`window.EYE_CROPS` 格式，配合 `splash.html` 里的 `RIG` 曲线），`?art=classic` / `-Art classic` 时使用。同样**不要手改**。
 - `assets/sound.js`：开屏音效（Ogg/Opus，base64），由 `tools/make_sound.py` 合成。`assets/icon.png`、`launcher/custom.ico`：页面图标和快捷方式图标。
 - `tools/make_sound.py`：音效生成脚本（Python + numpy，输出 wav；转成 Ogg 并写进 `assets/sound.js` 需要 ffmpeg）。
 - `launcher/launch.ps1`：启动器。用 Edge `--app` 模式开窗口，裁剪到刚好盖住 Claude 的窗口，并在后台启动 Claude。

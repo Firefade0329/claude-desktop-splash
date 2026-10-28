@@ -43,6 +43,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\make_shortcut.ps1
 
 3. 以后用桌面上的“Claude 开屏启动”快捷方式来打开 Claude。
 
+**两套角色图**：默认播放新图。想用原来那套，生成快捷方式时加 `-Art classic`（可以和默认的快捷方式各建一个，用 `-LinkName` 起不同的名字）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\make_shortcut.ps1 -LinkName "Claude 开屏启动（原版图）" -Desktop -Art classic
+```
+
 这个脚本会做三件事：
 - 查出你电脑上 Claude 的应用 ID，存进 `launcher\config.json`；
 - 快捷方式的图标用仓库里的 `launcher\custom.ico`（角色头像）；没有这个文件时，从你已经安装的 Claude 里提取图标，存进 `launcher\claude.ico`（只在你自己的电脑上生成，不包含在仓库里）；
@@ -58,6 +64,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\make_shortcut.ps1
 | `-NoSplash` | 只启动 Claude，不播动画 |
 | `-Fullscreen` | 忽略 Claude 的窗口，盖住整个主屏幕 |
 | `-NoSound` | 不播放开屏音效 |
+| `-Art classic` | 用原来的角色图（`assets\classic\`）；不加就是新图 |
 | `-ClaudeDelayMs N` | 动画出现 N 毫秒后再启动 Claude（默认 800） |
 | `-FadeMs N` / `-FadeInMs N` | 淡出 / 淡入时长（默认 800 / 250 毫秒） |
 | `-ReadyTimeoutSec N` | 动画窗口出现后，页面多久没准备好就放弃动画（默认 8 秒） |
@@ -71,7 +78,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 
 ## 它是怎么工作的（简述）
 
-- `splash.html` 是动画本身（Canvas 绘制的网页）。图片和音效都内嵌在 `assets\` 的几个 `.js` 数据文件里：闭眼底图、睁眼序列（31 帧，只有眼睑在动，眼珠不动）、音效（Ogg/Opus）、页面图标。
+- `splash.html` 是动画本身（Canvas 绘制的网页）。图片和音效都内嵌在 `assets\` 的几个 `.js` 数据文件里：闭眼底图、睁眼序列（31 帧，只有眼睑在动，眼珠不动）、音效（Ogg/Opus）、页面图标。原来那套角色图在 `assets\classic\`（闭眼底图 + 三张睁眼图），页面参数 `?art=classic` 时加载。
 - 音效用 Web Audio 播放；启动器给 Edge 加了 `--autoplay-policy=no-user-gesture-required`，所以不用先点一下就能出声。音效 1.5 秒内没解码好就先静音播放，不会耽误动画。
 - `launcher\launch.ps1` 用 Edge 的 `--app` 模式打开它，把窗口裁剪到刚好盖住 Claude 的窗口，并在后台启动 Claude；播完后淡出。
 - 冷启动时，窗口位置取自 Claude 自己保存的 `window-state.json`，读不到时才退回到上次记住的位置或整个屏幕。

@@ -10,6 +10,7 @@
 
 ### 修改
 - 标题上方的小字从 “CLAUDE · HARNESS” 改为 “CLAUDE”。
+- **原来的角色图保留为可选项**：放在 `assets/classic/`，默认用新图；`launch.ps1 -Art classic` / `make_shortcut.ps1 -Art classic` / 页面参数 `?art=classic` 切换到原图（原图用原来的三帧睁眼和眼睑曲线，和 1.1.3 完全一样）。
 - 启动 Edge 时加了 `--autoplay-policy=no-user-gesture-required`（只作用于动画用的临时窗口），让音效不用点击就能播放。
 - README 截图换成新画面。
 
