@@ -677,8 +677,6 @@
     }
     const p0 = FORCE_P !== null ? FORCE_P : 0; paintFace(cc, p0); lastP = p0;
     if (q.has('perf')) console.log('READY after ' + performance.now().toFixed(0) + ' ms (页面加载 + 线稿提取 + 光流预计算)');
-    // ?record：录屏用。不自己播放，由外部逐帧调用 __frame(t)（t 每次加 1/fps），粒子按真实的帧间隔运动
-    if (q.has('record')) { resize(); typedN = -1; lastP = -1; dust = []; lastT = 0; window.__frame = t => { render(t); return true; }; document.documentElement.dataset.rec = 'ready'; return; }
     if (FREEZE !== null) { resize(); render(FREEZE); return; }
     if (LAUNCHER) whenWindowReady().then(start); else start();
   }).catch(e => console.error(e));
