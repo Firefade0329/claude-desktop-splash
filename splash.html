@@ -5,6 +5,7 @@
 <meta name="google" content="notranslate">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Claude Splash</title>
+<link rel="icon" type="image/png" href="assets/icon.png">
 <style>
   :root { --orange: #e8762c; --ink: #5a3622; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -15,7 +16,7 @@
   .layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 
   #cam { position: absolute; inset: 0; transform-origin: 40% 36%; will-change: transform; }
-  #cam canvas { object-fit: cover; object-position: center; opacity: .003; will-change: opacity; }
+  #cam canvas, #cam video { object-fit: cover; object-position: center; opacity: .003; will-change: opacity; }
   #bloom { background: radial-gradient(55% 70% at 42% 34%, rgba(255,196,120,.8), rgba(255,170,90,0) 70%); opacity: .003; }
 
   /* 文字放在右上角的空白处，不压住人物 */
@@ -42,13 +43,14 @@
   <canvas id="rib" class="layer"></canvas>
   <div id="cam">
     <canvas id="color" class="layer"></canvas>
+    <video id="vid" class="layer" muted playsinline preload="auto"></video>
     <canvas id="line" class="layer"></canvas>
     <canvas id="lineEyes" class="layer"></canvas>
   </div>
   <canvas id="fx" class="layer"></canvas>
   <div id="bloom" class="layer"></div>
   <div id="hud">
-    <div class="tag" id="tag">CLAUDE · HARNESS</div>
+    <div class="tag" id="tag">CLAUDE</div>
     <div class="title"><span id="typed"></span><span class="caret" id="caret"></span></div>
     <div class="rule" id="rule"></div>
     <div class="welcome" id="welcome">欢迎回来，<em>博士</em></div>
@@ -58,8 +60,15 @@
 </div>
 <div id="hint">空格 / R 重播 · F 全屏 · Esc 退出</div>
 
-<script src="assets/claude-closed.js"></script>
-<script src="assets/eyes-frames.js"></script>
+<script>
+  // 选择角色图：默认用新图 (assets/)；?art=classic 用原作者的图 (assets/classic/)。启动器的 -Art classic 会加上这个参数
+  (function () {
+    var art = new URLSearchParams(location.search).get('art') === 'classic' ? 'classic' : 'new';
+    var dir = art === 'classic' ? 'assets/classic/' : 'assets/';
+    window.SPLASH_ART = art;
+    document.write('<script src="' + dir + 'claude-closed.js"><\/script><script src="' + dir + 'eyes-frames.js"><\/script><script src="' + dir + 'sound.js"><\/script>');
+  })();
+</script>
 <script>
 (() => {
   // ================= 配置（想改文案/节奏就改这里） =================
@@ -96,12 +105,21 @@
   // 睁眼进度曲线：时间进度 u(0~1) -> 画面进度 p(0=闭眼, 1=01, 2=02, 3=03)。开头慢、中间快、结尾缓
   const OPEN_KEYS = [[0, 0], [.14, .12], [.50, 1], [.75, 1.95], [1, 3]];
   // 眼睛在【底图】里的位置：lash = 闭眼睫毛带（用来把线稿拆成“脸”和“眼睛”两层）
-  const EYES = [
+  // 新图 (默认)
+  const EYES_NEW = [
+    { lash: { c: [462, 345], rx: 73, ry: 30, th: -0.24 } },
+    { lash: { c: [701, 301], rx: 71, ry: 30, th: -0.11 } }
+  ];
+  // 原作者的图 (?art=classic)
+  const EYES_CLASSIC = [
     { lash: { c: [476, 352], rx: 74, ry: 32, th: -.18 } },
     { lash: { c: [697, 305], rx: 84, ry: 30, th: -.23 } }
   ];
+  const EYES = window.SPLASH_ART === 'classic' ? EYES_CLASSIC : EYES_NEW;
 
   const q = new URLSearchParams(location.search);
+  const ART = window.SPLASH_ART;                                   // 'new'（默认）或 'classic'，见页面开头的加载脚本
+  const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
   const FREEZE = q.has('t') ? parseFloat(q.get('t')) : null;     // ?t=3.2 定格某一帧（调试）
   const FORCE_P = q.has('p') ? parseFloat(q.get('p')) : null;    // ?p=1.5 固定睁眼进度（调试：0 闭眼, 1=01, 2=02, 3=03）
   const ZOOM = q.has('zoom') ? parseFloat(q.get('zoom')) : null; // ?zoom=2.6 放大看眼睛（调试）
@@ -113,11 +131,58 @@
   // 调试：?dbg 把“帧间隔超过 100 ms”的卡顿记录（播放时间:间隔ms）附在窗口标题后面，便于从外面读出
   const DBG = q.has('dbg'), gaps = [];
   const setState = s => { document.title = 'CLAUDE_SPLASH_' + s + (s === 'PLAYING' || s === 'READY' ? '|nc=' + Math.max(0, Math.round((outerHeight - innerHeight) * devicePixelRatio)) : '') + (DBG ? '|gaps=' + gaps.join(';') : ''); };
+  // ---------- 音效（assets/sound.js，和时间轴对齐的一段 9.6 秒合成音）：?mute 静音，?vol=0.5 调音量 ----------
+  const VOL = q.has('vol') ? clamp(+q.get('vol') || 0) : 0.8;
+  let actx = null, sbuf = null, sgain = null, ssrc = null;
+  const sndState = s => { document.documentElement.dataset.sound = s; };
+  async function initSound() {
+    if (q.has('mute') || !window.SPLASH_SOUND || VOL <= 0) { sndState('off'); return; }
+    try {
+      const bin = atob(window.SPLASH_SOUND.split(',')[1]), u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+      sbuf = await actx.decodeAudioData(u8.buffer); sndState('ready');
+    } catch (e) { actx = null; sndState('fail'); }
+  }
+  function playSound(delay) {
+    if (!actx || !sbuf) return;
+    try {
+      if (actx.state === 'suspended') actx.resume();
+      if (ssrc) { try { ssrc.stop(); } catch (e) {} }
+      sgain = actx.createGain(); sgain.gain.value = VOL; sgain.connect(actx.destination);
+      ssrc = actx.createBufferSource(); ssrc.buffer = sbuf; ssrc.connect(sgain); ssrc.start(actx.currentTime + delay);
+      sndState(actx.state === 'running' ? 'playing' : 'blocked:' + actx.state);
+    } catch (e) { sndState('fail'); }
+  }
+  function fadeSound(sec) {
+    if (!actx || !sgain) return;
+    const n = actx.currentTime; sgain.gain.cancelScheduledValues(n); sgain.gain.setValueAtTime(sgain.gain.value, n); sgain.gain.linearRampToValueAtTime(0, n + sec);
+  }
+  // ---------- 睁眼视频（只用于新图）：assets/video/ 里的 4K60 / 1080p60 两个版本，按屏幕大小选；载入失败就退回到逐帧合成的睁眼序列 ----------
+  //   视频的第 0 帧就是闭眼底图；彩图浮现时显示的就是视频（停在第 0 帧），VIDEO_START 秒开始播放，视频里约 2.5 秒处睁眼
+  const VIDEO_START = 4.5;
+  const vid = document.getElementById('vid'); let vidOK = false, vidStarted = false;
+  async function initVideo() {
+    if (window.SPLASH_ART === 'classic' || q.has('novideo')) return;
+    const big = Math.max(screen.width, screen.height) * (devicePixelRatio || 1) > 2200;
+    vid.src = q.get('video') || (big ? 'assets/video/open_4k60.mp4' : 'assets/video/open_1080p60.mp4');
+    await new Promise(res => { vid.addEventListener('canplaythrough', res, { once: true }); vid.addEventListener('error', res, { once: true }); setTimeout(res, 4000); vid.load(); });
+    if (vid.error || vid.readyState < 3) { vid.removeAttribute('src'); vid.load(); return; }
+    vid.pause(); vid.currentTime = 0; vidOK = true;
+    T.text = 7.6; T.end = 9.3; CFG.total = 10.0;            // 视频版的时间轴：睁眼约在 7.0~7.6 秒，之后出字
+  }
+  function syncVideo(tt) {
+    if (!vidOK) return;
+    const vt = tt - VIDEO_START;
+    if (FREEZE !== null) { const w = clamp(vt, 0, (vid.duration || 5) - .02); if (Math.abs(vid.currentTime - w) > .001) vid.currentTime = w; return; }   // ?t= 定格：直接跳到对应帧
+    if (vt < 0) { if (vidStarted || vid.currentTime > .001) { vid.pause(); vid.currentTime = 0; vidStarted = false; } return; }
+    if (!vidStarted) { vidStarted = true; vid.currentTime = Math.min(vt, vid.duration || 5); vid.play().catch(() => {}); return; }
+    if (!vid.ended && Math.abs(vid.currentTime - vt) > .15 && vt < (vid.duration || 5)) vid.currentTime = vt;   // 卡顿后对齐
+  }
   const TUNE = { lo: +(q.get('lo') || 48), hi: +(q.get('hi') || 150), blur: +(q.get('blur') || 1.5) };
 
   const $ = id => document.getElementById(id);
-  const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
-  const lerp = (a, b, t) => a + (b - a) * t;
+    const lerp = (a, b, t) => a + (b - a) * t;
   const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
   const easeOut = t => 1 - Math.pow(1 - clamp(t), 2.4);
   const easeInOut = t => { t = clamp(t); return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
@@ -181,6 +246,18 @@
     return { u, v };
   }
   async function buildRigs(base) {
+    // v2：睁眼序列（assets/eyes-frames.js 里的 window.EYE_SEQ）——只用一只完全睁开的眼睛，眼睑像刚体一样从闭眼位置滑上去，
+    //     每 0.1 进度预先合成一帧；播放时只在相邻两帧之间线性混合（两帧只差约 1 像素，没有重影）
+    if (window.EYE_SEQ) {
+      const S = window.EYE_SEQ;
+      for (const key of ['L', 'R']) {
+        const [, , w, h] = S.wins[key];
+        const imgs = await Promise.all(S[key].map(u => loadImg(u)));
+        const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        rigs[key] = { win: S.wins[key], seq: imgs.map(im => winData(im, null, w, h)), frames: [], out: new ImageData(w, h), cv, g: cv.getContext('2d') };
+      }
+      return;
+    }
     const crops = window.EYE_CROPS;
     const imgs = await Promise.all(crops.frames.map(async f => ({ L: await loadImg(f.L), R: await loadImg(f.R) })));
     for (const key of ['L', 'R']) {
@@ -210,6 +287,12 @@
   }
   // 当前画面进度 p（0 闭眼 … 3 = 03）下，合成一只眼的窗口
   function composeEye(E, p) {
+    if (E.seq) {
+      const n = E.seq.length, x = clamp(p / 3) * (n - 1), k = Math.min(n - 2, Math.floor(x)), s = x - k;
+      const A = E.seq[k].data, B = E.seq[k + 1].data, out = E.out.data;
+      for (let i = 0; i < out.length; i += 4) { out[i] = A[i] + (B[i] - A[i]) * s; out[i + 1] = A[i + 1] + (B[i + 1] - A[i + 1]) * s; out[i + 2] = A[i + 2] + (B[i + 2] - A[i + 2]) * s; out[i + 3] = 255; }
+      return;
+    }
     const [, wy, w, h] = E.win, k = Math.min(2, Math.floor(p)), s = p - k;
     const A = E.frames[k].data, B = E.frames[k + 1].data, C = E.frames[0].data, tA = E.top[k], tB = E.top[k + 1], out = E.out.data;
     const bh = lerp(BAND[k], BAND[k + 1], s);
@@ -519,14 +602,15 @@
     lineEyes.style.opacity = Math.max(.003, smooth(T.eyesIn, T.eyesInEnd, tt) * lineOut);
     // 3) 闭眼底图：从线稿里浮现（先淡入，同时从头部向外铺开）
     const ci = easeInOut((tt - T.dawn) / (T.dawnEnd - T.dawn));
-    color.style.opacity = Math.max(.003, ci);
-    const cr = ci * 150;
-    setMask(color, `radial-gradient(ellipse at ${FACE.x}% ${FACE.y}%, #000 ${cr}%, transparent ${cr + 35}%)`);
+    const cr = ci * 150, colorLayer = vidOK ? vid : color;
+    colorLayer.style.opacity = Math.max(.003, ci);
+    setMask(colorLayer, `radial-gradient(ellipse at ${FACE.x}% ${FACE.y}%, #000 ${cr}%, transparent ${cr + 35}%)`);
+    syncVideo(tt);
     $('bloom').style.opacity = Math.max(.003, Math.sin(Math.PI * clamp((tt - 4.0) / 1.8)) * .28);
     // 4) 睁眼：画面进度 p（0 闭眼 … 3 = 03）
     lap('styles');
     const pr = FORCE_P !== null ? FORCE_P : openProgress((tt - T.open) / (T.openEnd - T.open));
-    if (baseImg && Math.abs(pr - lastP) > .003) { lastP = pr; paintFace(cc, pr); }
+    if (baseImg && !vidOK && Math.abs(pr - lastP) > .003) { lastP = pr; paintFace(cc, pr); }
     lap('eyes');
     // 镜头
     $('cam').style.transform = ZOOM ? `scale(${ZOOM})` : `scale(${1.06 - .06 * easeOut((tt - 2.0) / 6)})`;
@@ -583,9 +667,11 @@
   }
   function start() {
     cancelAnimationFrame(raf); clearInterval(tickId); typedN = -1; lastP = -1; dust = []; lastT = 0;
+    if (vidOK) { vid.pause(); vid.currentTime = 0; vidStarted = false; }
     doneSet = false; setState('PLAYING');
     typed.textContent = '';          // 重播时必须手动清空：打字逻辑只在字数变化时才更新，开头的字数 (-1) 和重置值相同，不会自己清掉上一轮的整行文字
     clock = -.15; lastNow = performance.now();       // 开头先停 0.15 s，给窗口显示出来后的第一帧留余量
+    playSound(.15);                                  // 音效和动画的 0 秒对齐
     if (TICK) tickId = setInterval(() => loop(performance.now()), 16); else raf = requestAnimationFrame(loop);
   }
   // 启动器模式：先告诉启动器“页面加载好了”(READY)，启动器把窗口（仍然透明）摆到 Claude 窗口的位置和大小；
@@ -609,6 +695,9 @@
     baseImg = base;
     color.width = base.naturalWidth; color.height = base.naturalHeight;
     await buildRigs(base);                                  // 眼睛的四张窗口 + 眼睑曲线
+    await initVideo();                                      // 新图：睁眼视频（最多等 4 秒，失败就用逐帧合成的睁眼）
+    await Promise.race([initSound(), new Promise(r => setTimeout(r, 1500))]);   // 音效解码好再开始；1.5 秒还没好（或失败）就先静音播放，不耽误动画
+    if (q.has('sndtest')) { const d = document.createElement('div'); d.id = 'sndtest'; d.style.cssText = 'position:fixed;left:20px;bottom:20px;z-index:999;font:32px monospace;background:#000;color:#0f0;padding:8px'; document.body.appendChild(d); setInterval(() => { d.textContent = 'sound=' + (document.documentElement.dataset.sound || 'none') + ' ctx=' + (actx ? actx.state : '-'); }, 100); }
     // 线稿直接从闭眼底图提取
     const src = document.createElement('canvas'); src.width = base.naturalWidth; src.height = base.naturalHeight;
     src.getContext('2d').drawImage(base, 0, 0);
@@ -631,10 +720,10 @@
     if (LAUNCHER) whenWindowReady().then(start); else start();
   }).catch(e => console.error(e));
 
-  addEventListener('click', () => { if (LAUNCHER) { doneSet = true; setState('DONE'); } });
+  addEventListener('click', () => { if (LAUNCHER) { doneSet = true; setState('DONE'); fadeSound(.5); } });
   addEventListener('keydown', e => {
     const k = e.key.toLowerCase();
-    if (LAUNCHER) { if (k === 'escape' || k === ' ' || k === 'enter') { doneSet = true; setState('DONE'); } return; }   // 启动器模式：这些键 = 跳过
+    if (LAUNCHER) { if (k === 'escape' || k === ' ' || k === 'enter') { doneSet = true; setState('DONE'); fadeSound(.5); } return; }   // 启动器模式：这些键 = 跳过
     if ((k === ' ' || k === 'r') && FREEZE === null) start();
     if (k === 'f') (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {});
   });

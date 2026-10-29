@@ -40,7 +40,7 @@
 
 ### 不要改的
 
-- `assets/claude-closed.js`、`assets/eyes-frames.js`：由维护者本机的素材生成的内嵌图片数据（base64），**不要手改，也不要重新生成**。
+- `assets/claude-closed.js`、`assets/eyes-frames.js`：由维护者本机的素材生成的内嵌图片数据（base64），**不要手改，也不要重新生成**。`assets/sound.js` 由 `tools/make_sound.py` 生成，改音效请改脚本。`assets/video/` 里的视频带有 AI 生成内容标识，不要重新编码或去掉元数据。
 - `docs/` 里的截图：不要替换或新增，除非维护者明确要求。
 - 版本号、标签、Release：由维护者确认后在本机完成。`CHANGELOG.md` 按版本记录，通常由维护者随发布更新，需要补充的话请在 Issue 或 PR 里说明。
 
