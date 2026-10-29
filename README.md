@@ -19,10 +19,11 @@ Plays a short animation over the Claude desktop window when you start it from a 
 一个给 Claude 桌面应用加的开屏动画。你双击快捷方式，动画会盖在 Claude 的窗口上播放，同时在后台启动 Claude，播完后淡出，露出 Claude。
 
 - 动画窗口会精确盖住 Claude 的窗口，并且跟着它移动、缩放。
-- 有一段约 9.6 秒的开屏音效（原创合成，和动画时间轴对齐，跳过时淡出）。不想要声音：给 `launch.ps1` 加 `-NoSound`。
+- 睁眼是一段 4K 60fps 的视频：头发和飘带随风飘动，眼睛自然睁开。
+- 有一段约 10 秒的开屏音效（原创合成，和动画时间轴对齐，跳过时淡出）。不想要声音：给 `launch.ps1` 加 `-NoSound`。
 - 播放中**点击**动画可以立即跳过，右下角的提示写的是“点击跳过”。Esc / 空格 / 回车不保证有效：启动器不让动画窗口获得焦点，按键多半送给了 Claude。
 - 如果动画窗口出现后，页面 8 秒内没准备好，会自动放弃动画，只启动 Claude，不会卡住；如果动画窗口一直没出现，最长约 34 秒后才会启动 Claude。
-- 从双击快捷方式到启动器结束，实测约 13–14 秒（`launcher.log` 里第一行 `launcher start` 到最后一行 `launcher end` 的时间差；其中动画本身约 9.3 秒，约 2 秒是页面准备时间，还包含 Claude 窗口出现和淡出、清理的时间），实际取决于机器。
+- 从双击快捷方式到启动器结束，实测约 13–14 秒（`launcher.log` 里第一行 `launcher start` 到最后一行 `launcher end` 的时间差；其中动画本身约 10 秒，约 2 秒是页面准备时间，还包含 Claude 窗口出现和淡出、清理的时间），实际取决于机器。
 - **Claude 已经在运行时双击快捷方式，不会再播动画**：窗口开着的，直接带到前台；最小化的会还原；点了关闭、只留在系统托盘里的，会请它把窗口显示出来（和从开始菜单点它一样）。想看动画，需要先把 Claude **完全退出**（在托盘图标上右键退出）。判断依据是 Claude 桌面端的进程还在不在。
 - 欢迎语是固定的文字，想改可以直接改 `splash.html`。
 
@@ -78,7 +79,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 
 ## 它是怎么工作的（简述）
 
-- `splash.html` 是动画本身（Canvas 绘制的网页）。图片和音效都内嵌在 `assets\` 的几个 `.js` 数据文件里：闭眼底图、睁眼序列（31 帧，只有眼睑在动，眼珠不动）、音效（Ogg/Opus）、页面图标。原来那套角色图在 `assets\classic\`（闭眼底图 + 三张睁眼图），页面参数 `?art=classic` 时加载。
+- `splash.html` 是动画本身（Canvas 绘制的网页）。闭眼底图、音效（Ogg/Opus）、页面图标内嵌在 `assets\` 的数据文件里；睁眼视频在 `assets\video\`（4K60 和 1080p60 两个版本，按屏幕大小选）。视频载不进来时（或页面参数 `?novideo`），用预先合成的 31 帧睁眼序列代替。原来那套角色图在 `assets\classic\`（闭眼底图 + 三张睁眼图），页面参数 `?art=classic` 时加载。
 - 音效用 Web Audio 播放；启动器给 Edge 加了 `--autoplay-policy=no-user-gesture-required`，所以不用先点一下就能出声。音效 1.5 秒内没解码好就先静音播放，不会耽误动画。
 - `launcher\launch.ps1` 用 Edge 的 `--app` 模式打开它，把窗口裁剪到刚好盖住 Claude 的窗口，并在后台启动 Claude；播完后淡出。
 - 冷启动时，窗口位置取自 Claude 自己保存的 `window-state.json`，读不到时才退回到上次记住的位置或整个屏幕。
@@ -207,7 +208,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 ## 许可 / License
 
 - **代码**：[MIT License](LICENSE)，Copyright (c) 2026 Firefade0329。
-- **图片**（`assets\` 里内嵌的角色图，以及图标 `assets\icon.png`、`launcher\custom.ico`）：**不在 MIT 协议的授权范围内**，版权和使用许可另行说明。角色图由 AI 工具生成。如需在本项目之外使用这些图片，请先联系作者。
+- **图片和视频**（`assets\` 里内嵌的角色图、`assets\video\` 里的睁眼视频，以及图标 `assets\icon.png`、`launcher\custom.ico`）：**不在 MIT 协议的授权范围内**，版权和使用许可另行说明。角色图和睁眼视频由 AI 工具生成；视频文件里保留了生成平台写入的 AI 生成内容标识（`AIGC` 元数据）。如需在本项目之外使用这些图片和视频，请先联系作者。
 - **音效**（`assets\sound.js`）：由 `tools\make_sound.py` 用代码合成，没有使用任何音频素材，和代码一样按 MIT 协议。
 
-*Code (and the code-synthesized startup sound) is MIT-licensed. The character images and icons (`assets\`, `launcher\custom.ico`) are not covered by the MIT license; contact the author before reusing them elsewhere.*
+*Code (and the code-synthesized startup sound) is MIT-licensed. The character images, the eye-opening video and the icons (`assets\`, `assets\video\`, `launcher\custom.ico`) are AI-generated (the video keeps its AIGC label metadata) and are not covered by the MIT license; contact the author before reusing them elsewhere.*

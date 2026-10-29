@@ -16,7 +16,7 @@
   .layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 
   #cam { position: absolute; inset: 0; transform-origin: 40% 36%; will-change: transform; }
-  #cam canvas { object-fit: cover; object-position: center; opacity: .003; will-change: opacity; }
+  #cam canvas, #cam video { object-fit: cover; object-position: center; opacity: .003; will-change: opacity; }
   #bloom { background: radial-gradient(55% 70% at 42% 34%, rgba(255,196,120,.8), rgba(255,170,90,0) 70%); opacity: .003; }
 
   /* 文字放在右上角的空白处，不压住人物 */
@@ -43,6 +43,7 @@
   <canvas id="rib" class="layer"></canvas>
   <div id="cam">
     <canvas id="color" class="layer"></canvas>
+    <video id="vid" class="layer" muted playsinline preload="auto"></video>
     <canvas id="line" class="layer"></canvas>
     <canvas id="lineEyes" class="layer"></canvas>
   </div>
@@ -65,10 +66,9 @@
     var art = new URLSearchParams(location.search).get('art') === 'classic' ? 'classic' : 'new';
     var dir = art === 'classic' ? 'assets/classic/' : 'assets/';
     window.SPLASH_ART = art;
-    document.write('<script src="' + dir + 'claude-closed.js"><\/script><script src="' + dir + 'eyes-frames.js"><\/script>');
+    document.write('<script src="' + dir + 'claude-closed.js"><\/script><script src="' + dir + 'eyes-frames.js"><\/script><script src="' + dir + 'sound.js"><\/script>');
   })();
 </script>
-<script src="assets/sound.js"></script>
 <script>
 (() => {
   // ================= 配置（想改文案/节奏就改这里） =================
@@ -157,6 +157,27 @@
   function fadeSound(sec) {
     if (!actx || !sgain) return;
     const n = actx.currentTime; sgain.gain.cancelScheduledValues(n); sgain.gain.setValueAtTime(sgain.gain.value, n); sgain.gain.linearRampToValueAtTime(0, n + sec);
+  }
+  // ---------- 睁眼视频（只用于新图）：assets/video/ 里的 4K60 / 1080p60 两个版本，按屏幕大小选；载入失败就退回到逐帧合成的睁眼序列 ----------
+  //   视频的第 0 帧就是闭眼底图；彩图浮现时显示的就是视频（停在第 0 帧），VIDEO_START 秒开始播放，视频里约 2.5 秒处睁眼
+  const VIDEO_START = 4.5;
+  const vid = document.getElementById('vid'); let vidOK = false, vidStarted = false;
+  async function initVideo() {
+    if (window.SPLASH_ART === 'classic' || q.has('novideo')) return;
+    const big = Math.max(screen.width, screen.height) * (devicePixelRatio || 1) > 2200;
+    vid.src = q.get('video') || (big ? 'assets/video/open_4k60.mp4' : 'assets/video/open_1080p60.mp4');
+    await new Promise(res => { vid.addEventListener('canplaythrough', res, { once: true }); vid.addEventListener('error', res, { once: true }); setTimeout(res, 4000); vid.load(); });
+    if (vid.error || vid.readyState < 3) { vid.removeAttribute('src'); vid.load(); return; }
+    vid.pause(); vid.currentTime = 0; vidOK = true;
+    T.text = 7.6; T.end = 9.3; CFG.total = 10.0;            // 视频版的时间轴：睁眼约在 7.0~7.6 秒，之后出字
+  }
+  function syncVideo(tt) {
+    if (!vidOK) return;
+    const vt = tt - VIDEO_START;
+    if (FREEZE !== null) { const w = clamp(vt, 0, (vid.duration || 5) - .02); if (Math.abs(vid.currentTime - w) > .001) vid.currentTime = w; return; }   // ?t= 定格：直接跳到对应帧
+    if (vt < 0) { if (vidStarted || vid.currentTime > .001) { vid.pause(); vid.currentTime = 0; vidStarted = false; } return; }
+    if (!vidStarted) { vidStarted = true; vid.currentTime = Math.min(vt, vid.duration || 5); vid.play().catch(() => {}); return; }
+    if (!vid.ended && Math.abs(vid.currentTime - vt) > .15 && vt < (vid.duration || 5)) vid.currentTime = vt;   // 卡顿后对齐
   }
   const TUNE = { lo: +(q.get('lo') || 48), hi: +(q.get('hi') || 150), blur: +(q.get('blur') || 1.5) };
 
@@ -581,14 +602,15 @@
     lineEyes.style.opacity = Math.max(.003, smooth(T.eyesIn, T.eyesInEnd, tt) * lineOut);
     // 3) 闭眼底图：从线稿里浮现（先淡入，同时从头部向外铺开）
     const ci = easeInOut((tt - T.dawn) / (T.dawnEnd - T.dawn));
-    color.style.opacity = Math.max(.003, ci);
-    const cr = ci * 150;
-    setMask(color, `radial-gradient(ellipse at ${FACE.x}% ${FACE.y}%, #000 ${cr}%, transparent ${cr + 35}%)`);
+    const cr = ci * 150, colorLayer = vidOK ? vid : color;
+    colorLayer.style.opacity = Math.max(.003, ci);
+    setMask(colorLayer, `radial-gradient(ellipse at ${FACE.x}% ${FACE.y}%, #000 ${cr}%, transparent ${cr + 35}%)`);
+    syncVideo(tt);
     $('bloom').style.opacity = Math.max(.003, Math.sin(Math.PI * clamp((tt - 4.0) / 1.8)) * .28);
     // 4) 睁眼：画面进度 p（0 闭眼 … 3 = 03）
     lap('styles');
     const pr = FORCE_P !== null ? FORCE_P : openProgress((tt - T.open) / (T.openEnd - T.open));
-    if (baseImg && Math.abs(pr - lastP) > .003) { lastP = pr; paintFace(cc, pr); }
+    if (baseImg && !vidOK && Math.abs(pr - lastP) > .003) { lastP = pr; paintFace(cc, pr); }
     lap('eyes');
     // 镜头
     $('cam').style.transform = ZOOM ? `scale(${ZOOM})` : `scale(${1.06 - .06 * easeOut((tt - 2.0) / 6)})`;
@@ -645,6 +667,7 @@
   }
   function start() {
     cancelAnimationFrame(raf); clearInterval(tickId); typedN = -1; lastP = -1; dust = []; lastT = 0;
+    if (vidOK) { vid.pause(); vid.currentTime = 0; vidStarted = false; }
     doneSet = false; setState('PLAYING');
     typed.textContent = '';          // 重播时必须手动清空：打字逻辑只在字数变化时才更新，开头的字数 (-1) 和重置值相同，不会自己清掉上一轮的整行文字
     clock = -.15; lastNow = performance.now();       // 开头先停 0.15 s，给窗口显示出来后的第一帧留余量
@@ -672,6 +695,7 @@
     baseImg = base;
     color.width = base.naturalWidth; color.height = base.naturalHeight;
     await buildRigs(base);                                  // 眼睛的四张窗口 + 眼睑曲线
+    await initVideo();                                      // 新图：睁眼视频（最多等 4 秒，失败就用逐帧合成的睁眼）
     await Promise.race([initSound(), new Promise(r => setTimeout(r, 1500))]);   // 音效解码好再开始；1.5 秒还没好（或失败）就先静音播放，不耽误动画
     if (q.has('sndtest')) { const d = document.createElement('div'); d.id = 'sndtest'; d.style.cssText = 'position:fixed;left:20px;bottom:20px;z-index:999;font:32px monospace;background:#000;color:#0f0;padding:8px'; document.body.appendChild(d); setInterval(() => { d.textContent = 'sound=' + (document.documentElement.dataset.sound || 'none') + ' ctx=' + (actx ? actx.state : '-'); }, 100); }
     // 线稿直接从闭眼底图提取

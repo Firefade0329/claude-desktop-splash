@@ -23,7 +23,7 @@
 
 ### 联网
 
-- **脚本和页面本身不联网**：两个 PowerShell 脚本里没有任何下载或网络请求的命令；`splash.html` 只加载仓库里的本地数据文件（`assets/*.js` 和页面图标 `assets/icon.png`），页面里没有网络请求，数据文件里也没有 `http(s)` 地址。
+- **脚本和页面本身不联网**：两个 PowerShell 脚本里没有任何下载或网络请求的命令；`splash.html` 只加载仓库里的本地文件（`assets/*.js`、页面图标 `assets/icon.png`、睁眼视频 `assets/video/*.mp4`），页面里没有网络请求，数据文件里也没有 `http(s)` 地址。
 - **Edge 自己可能联网（未验证）**：动画用 Edge（或 Chrome）的应用窗口播放。启动参数里有 `--disable-background-networking`、`--disable-sync`，并且使用独立的临时配置目录；但我没法确认 Edge 在这种模式下是否完全不发起任何网络请求。
 
 ### 读取的数据
