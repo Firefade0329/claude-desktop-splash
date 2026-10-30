@@ -66,7 +66,7 @@
     var art = new URLSearchParams(location.search).get('art') === 'classic' ? 'classic' : 'new';
     var dir = art === 'classic' ? 'assets/classic/' : 'assets/';
     window.SPLASH_ART = art;
-    document.write('<script src="' + dir + 'claude-closed.js"><\/script><script src="' + dir + 'eyes-frames.js"><\/script><script src="' + dir + 'sound.js"><\/script>' + (art === 'new' ? '<script src="assets/video/first-frame.js"><\/script>' : ''));
+    document.write('<script src="' + dir + 'claude-closed.js"><\/script><script src="' + dir + 'eyes-frames.js"><\/script><script src="' + dir + 'sound.js"><\/script>');
   })();
 </script>
 <script>
@@ -165,7 +165,8 @@
   }
   // ---------- 睁眼视频（只用于新图）：assets/video/ 里的 4K60 / 1080p60 两个版本，按屏幕大小选；载入失败就退回到逐帧合成的睁眼序列 ----------
   //   彩图浮现时显示的就是视频（停在第 0 帧），VIDEO_START 秒开始播放，视频里约 1.6~2.4 秒处睁眼。
-  //   视频的取景比闭眼底图略近（约 2%），所以视频版的线稿用视频第 0 帧（assets/video/first-frame.js）提取，眼睛位置也用 EYES_VIDEO
+  //   视频的取景比闭眼底图略近：视频版的线稿把底图按 VIDEO_FRAMING 放大、平移后再提取，和视频第 0 帧对齐；眼睛位置用 EYES_VIDEO
+  const VIDEO_FRAMING = { sx: 1.0210, sy: 1.0207, dx: -17.55, dy: -9.36 };   // 视频第 0 帧 = 底图 × (sx, sy) + (dx, dy)（底图像素）
   const VIDEO_START = 4.5;
   const vid = document.getElementById('vid'); let vidOK = false, vidStarted = false;
   async function initVideo() {
@@ -706,8 +707,8 @@
     if (q.has('sndtest')) { const d = document.createElement('div'); d.id = 'sndtest'; d.style.cssText = 'position:fixed;left:20px;bottom:20px;z-index:999;font:32px monospace;background:#000;color:#0f0;padding:8px'; document.body.appendChild(d); setInterval(() => { d.textContent = 'sound=' + (document.documentElement.dataset.sound || 'none') + ' ctx=' + (actx ? actx.state : '-'); }, 100); }
     // 线稿直接从闭眼底图提取
     const src = document.createElement('canvas'); src.width = base.naturalWidth; src.height = base.naturalHeight;
-    const lineSrc = vidOK && window.VIDEO_FIRST_IMG ? await loadImg(window.VIDEO_FIRST_IMG).catch(() => base) : base;   // 视频版：线稿从视频第 0 帧提取，和视频对齐
-    src.getContext('2d').drawImage(lineSrc, 0, 0, src.width, src.height);
+    const F = vidOK ? VIDEO_FRAMING : { sx: 1, sy: 1, dx: 0, dy: 0 };   // 视频版：底图按视频的取景放大、平移，线稿和视频对齐
+    src.getContext('2d').drawImage(base, F.dx, F.dy, base.naturalWidth * F.sx, base.naturalHeight * F.sy);
     buildLineart(src); src.width = 0;
     if (q.has('strip')) { showStrip(q.get('strip').split(',').map(Number), +(q.get('s') || 1.5)); return; }   // 调试：眼睛特写序列
     if (q.has('smooth')) { // 调试：把睁眼过程按 0.05 步长合成，输出相邻两步之间眼睛窗口的平均像素变化；尖峰 = 过渡里有突变/跳动
