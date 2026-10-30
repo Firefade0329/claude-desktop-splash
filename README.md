@@ -19,7 +19,7 @@ Plays a short animation over the Claude desktop window when you start it from a 
 一个给 Claude 桌面应用加的开屏动画。你双击快捷方式，动画会盖在 Claude 的窗口上播放，同时在后台启动 Claude，播完后淡出，露出 Claude。
 
 - 动画窗口会精确盖住 Claude 的窗口，并且跟着它移动、缩放。
-- 睁眼是一段 4K 60fps 的视频：头发和飘带随风飘动，眼睛自然睁开。
+- 睁眼是一段 4K 60fps 的 Live2D 动画：头发、飘带和花瓣随风飘动，眼睛自然睁开。
 - 有一段约 10 秒的开屏音效（原创合成，和动画时间轴对齐，跳过时淡出）。不想要声音：给 `launch.ps1` 加 `-NoSound`。
 - 播放中**点击**动画可以立即跳过，右下角的提示写的是“点击跳过”。Esc / 空格 / 回车不保证有效：启动器不让动画窗口获得焦点，按键多半送给了 Claude。
 - 如果动画窗口出现后，页面 8 秒内没准备好，会自动放弃动画，只启动 Claude，不会卡住；如果动画窗口一直没出现，最长约 34 秒后才会启动 Claude。
@@ -208,7 +208,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 ## 许可 / License
 
 - **代码**：[MIT License](LICENSE)，Copyright (c) 2026 Firefade0329。
-- **图片和视频**（`assets\` 里内嵌的角色图、`assets\video\` 里的睁眼视频，以及图标 `assets\icon.png`、`launcher\custom.ico`）：**不在 MIT 协议的授权范围内**，版权和使用许可另行说明。角色图和睁眼视频由 AI 工具生成；视频文件里保留了生成平台写入的 AI 生成内容标识（`AIGC` 元数据）。如需在本项目之外使用这些图片和视频，请先联系作者。
+- **图片和视频**（`assets\` 里内嵌的角色图、`assets\video\` 里的睁眼动画，以及图标 `assets\icon.png`、`launcher\custom.ico`）：**不在 MIT 协议的授权范围内**，版权和使用许可另行说明。角色图由 AI 工具生成，睁眼动画用 Live2D 制作。如需在本项目之外使用这些图片和视频，请先联系作者。
 - **音效**（`assets\sound.js`）：由 `tools\make_sound.py` 用代码合成，没有使用任何音频素材，和代码一样按 MIT 协议。
 
-*Code (and the code-synthesized startup sound) is MIT-licensed. The character images, the eye-opening video and the icons (`assets\`, `assets\video\`, `launcher\custom.ico`) are AI-generated (the video keeps its AIGC label metadata) and are not covered by the MIT license; contact the author before reusing them elsewhere.*
+*Code (and the code-synthesized startup sound) is MIT-licensed. The character images (AI-generated), the Live2D eye-opening animation and the icons (`assets\`, `assets\video\`, `launcher\custom.ico`) are not covered by the MIT license; contact the author before reusing them elsewhere.*

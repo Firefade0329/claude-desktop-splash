@@ -1,6 +1,6 @@
 """开屏动画的音效 (原创合成, 不用任何素材): 和 splash.html 的时间轴对齐, 输出立体声 wav.
 两个预设:
-  video   (默认, 新图 + 睁眼视频): 视频 4.5 秒开始播放, 约 7.0 秒睁眼, 7.6 秒出字, 9.3~10.0 秒淡出; 头发飘动时有一层轻柔的风声
+  video   (默认, 新图 + 睁眼视频): 视频 4.5 秒开始播放, 约 6.1~6.9 秒睁眼, 7.2 秒出字, 9.3~10.0 秒淡出; 头发飘动时有一层轻柔的风声
   classic (原图): 6.0 秒睁眼, 6.9 秒出字, 9.3 秒结束
   0.0  空气感的噪声慢慢升起 + 低音 D 的垫音
   0.7  流光划过: 滤波噪声从左扫到右
@@ -13,7 +13,7 @@ usage: python make_sound.py out.wav [--preset video|classic]          # 只生�
 import sys, os, numpy as np, wave
 
 PRESET = sys.argv[sys.argv.index('--preset') + 1] if '--preset' in sys.argv else 'video'
-P = {'video':   dict(open=6.95, arp=.12, text=7.6, end=10.0, dur=10.3, wind=(4.4, 9.9)),
+P = {'video':   dict(open=6.15, arp=.13, text=7.2, end=10.0, dur=10.3, wind=(4.4, 9.9)),
      'classic': dict(open=5.95, arp=.14, text=6.9, end=9.3, dur=9.6, wind=None)}[PRESET]
 SR = 44100; DUR = P['dur']
 t = np.arange(int(SR * DUR)) / SR
@@ -136,7 +136,7 @@ print('wav', sys.argv[1], PRESET, DUR, 's')
 if '--js' in sys.argv:
     import subprocess, base64
     ogg = sys.argv[1].rsplit('.', 1)[0] + '.ogg'
-    subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', sys.argv[1], '-c:a', 'libopus', '-b:a', '96k', '-map_metadata', '-1', ogg], check=True)
+    subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', sys.argv[1], '-c:a', 'libopus', '-b:a', '96k', '-map_metadata', '-1', '-fflags', '+bitexact', '-flags:a', '+bitexact', ogg], check=True)   # bitexact: 不写编码器版本号
     sub = ('classic',) if PRESET == 'classic' else ()
     js = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'assets', *sub, 'sound.js')
     open(js, 'w', encoding='utf-8').write('window.SPLASH_SOUND="data:audio/ogg;base64,' + base64.b64encode(open(ogg, 'rb').read()).decode() + '";')

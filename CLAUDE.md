@@ -13,7 +13,7 @@
 - `splash.html`：动画本体（Canvas）。运行时只依赖 `assets/` 里的数据文件。
 - `assets/claude-closed.js`（闭眼底图）、`assets/eyes-frames.js`（`window.EYE_SEQ`：31 帧睁眼序列）：由维护者本机的素材生成的内嵌图片数据（base64），**不要手改，也不要重新生成**。
 - `assets/classic/claude-closed.js`、`assets/classic/eyes-frames.js`：原来那套角色图（v1.1.3 及以前的，`window.EYE_CROPS` 格式，配合 `splash.html` 里的 `RIG` 曲线），`?art=classic` / `-Art classic` 时使用。同样**不要手改**。
-- `assets/video/open_4k60.mp4`、`assets/video/open_1080p60.mp4`：新图的睁眼视频（AI 生成，放大 + 插帧），文件里有生成平台写入的 `AIGC` 标识，**不要去掉，也不要重新编码**。载入失败时页面退回到 `eyes-frames.js` 的合成序列。
+- `assets/video/open_4k60.mp4`、`assets/video/open_1080p60.mp4`：新图的睁眼动画（Live2D，4K60 / 1080p60，无音轨，已去掉全部元数据），**不要重新编码**。`assets/video/first-frame.js`：视频第一帧（视频版的线稿从它提取）。载入失败时页面退回到 `eyes-frames.js` 的合成序列。
 - `assets/sound.js`：开屏音效（Ogg/Opus，base64），由 `tools/make_sound.py`（预设 `video`）合成；原图的在 `assets/classic/sound.js`（预设 `classic`）。`assets/icon.png`、`launcher/custom.ico`：页面图标和快捷方式图标。
 - `tools/make_sound.py`：音效生成脚本（Python + numpy，输出 wav；转成 Ogg 并写进 `assets/sound.js` 需要 ffmpeg）。
 - `launcher/launch.ps1`：启动器。用 Edge `--app` 模式开窗口，裁剪到刚好盖住 Claude 的窗口，并在后台启动 Claude。

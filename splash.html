@@ -66,7 +66,7 @@
     var art = new URLSearchParams(location.search).get('art') === 'classic' ? 'classic' : 'new';
     var dir = art === 'classic' ? 'assets/classic/' : 'assets/';
     window.SPLASH_ART = art;
-    document.write('<script src="' + dir + 'claude-closed.js"><\/script><script src="' + dir + 'eyes-frames.js"><\/script><script src="' + dir + 'sound.js"><\/script>');
+    document.write('<script src="' + dir + 'claude-closed.js"><\/script><script src="' + dir + 'eyes-frames.js"><\/script><script src="' + dir + 'sound.js"><\/script>' + (art === 'new' ? '<script src="assets/video/first-frame.js"><\/script>' : ''));
   })();
 </script>
 <script>
@@ -116,6 +116,11 @@
     { lash: { c: [697, 305], rx: 84, ry: 30, th: -.23 } }
   ];
   const EYES = window.SPLASH_ART === 'classic' ? EYES_CLASSIC : EYES_NEW;
+  // 视频第 0 帧里的眼睛位置（视频取景比底图近约 2%）
+  const EYES_VIDEO = [
+    { lash: { c: [454, 343], rx: 75, ry: 31, th: -0.24 } },
+    { lash: { c: [698, 298], rx: 72, ry: 31, th: -0.11 } }
+  ];
 
   const q = new URLSearchParams(location.search);
   const ART = window.SPLASH_ART;                                   // 'new'（默认）或 'classic'，见页面开头的加载脚本
@@ -159,7 +164,8 @@
     const n = actx.currentTime; sgain.gain.cancelScheduledValues(n); sgain.gain.setValueAtTime(sgain.gain.value, n); sgain.gain.linearRampToValueAtTime(0, n + sec);
   }
   // ---------- 睁眼视频（只用于新图）：assets/video/ 里的 4K60 / 1080p60 两个版本，按屏幕大小选；载入失败就退回到逐帧合成的睁眼序列 ----------
-  //   视频的第 0 帧就是闭眼底图；彩图浮现时显示的就是视频（停在第 0 帧），VIDEO_START 秒开始播放，视频里约 2.5 秒处睁眼
+  //   彩图浮现时显示的就是视频（停在第 0 帧），VIDEO_START 秒开始播放，视频里约 1.6~2.4 秒处睁眼。
+  //   视频的取景比闭眼底图略近（约 2%），所以视频版的线稿用视频第 0 帧（assets/video/first-frame.js）提取，眼睛位置也用 EYES_VIDEO
   const VIDEO_START = 4.5;
   const vid = document.getElementById('vid'); let vidOK = false, vidStarted = false;
   async function initVideo() {
@@ -169,7 +175,7 @@
     await new Promise(res => { vid.addEventListener('canplaythrough', res, { once: true }); vid.addEventListener('error', res, { once: true }); setTimeout(res, 4000); vid.load(); });
     if (vid.error || vid.readyState < 3) { vid.removeAttribute('src'); vid.load(); return; }
     vid.pause(); vid.currentTime = 0; vidOK = true;
-    T.text = 7.6; T.end = 9.3; CFG.total = 10.0;            // 视频版的时间轴：睁眼约在 7.0~7.6 秒，之后出字
+    T.text = 7.2; T.end = 9.3; CFG.total = 10.0;            // 视频版的时间轴：睁眼约在 6.1~6.9 秒，之后出字
   }
   function syncVideo(tt) {
     if (!vidOK) return;
@@ -380,7 +386,7 @@
     ex.putImageData(out, 0, 0);
     // 眼部遮罩（羽化椭圆）：把线稿拆成“脸”和“眼睛”两层，眼睛晚一点亮起
     const mask = mk(), mx = mask.getContext('2d');
-    for (const E of EYES) {
+    for (const E of (vidOK ? EYES_VIDEO : EYES)) {
       const Z = E.lash;
       mx.save(); mx.translate(Z.c[0] * SC, Z.c[1] * SC); mx.rotate(Z.th); mx.scale(1, Z.ry / Z.rx);
       const rr = (Z.rx + 8) * SC, g = mx.createRadialGradient(0, 0, 0, 0, 0, rr);
@@ -700,7 +706,8 @@
     if (q.has('sndtest')) { const d = document.createElement('div'); d.id = 'sndtest'; d.style.cssText = 'position:fixed;left:20px;bottom:20px;z-index:999;font:32px monospace;background:#000;color:#0f0;padding:8px'; document.body.appendChild(d); setInterval(() => { d.textContent = 'sound=' + (document.documentElement.dataset.sound || 'none') + ' ctx=' + (actx ? actx.state : '-'); }, 100); }
     // 线稿直接从闭眼底图提取
     const src = document.createElement('canvas'); src.width = base.naturalWidth; src.height = base.naturalHeight;
-    src.getContext('2d').drawImage(base, 0, 0);
+    const lineSrc = vidOK && window.VIDEO_FIRST_IMG ? await loadImg(window.VIDEO_FIRST_IMG).catch(() => base) : base;   // 视频版：线稿从视频第 0 帧提取，和视频对齐
+    src.getContext('2d').drawImage(lineSrc, 0, 0, src.width, src.height);
     buildLineart(src); src.width = 0;
     if (q.has('strip')) { showStrip(q.get('strip').split(',').map(Number), +(q.get('s') || 1.5)); return; }   // 调试：眼睛特写序列
     if (q.has('smooth')) { // 调试：把睁眼过程按 0.05 步长合成，输出相邻两步之间眼睛窗口的平均像素变化；尖峰 = 过渡里有突变/跳动
