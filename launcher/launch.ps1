@@ -33,6 +33,8 @@ param(
   [switch]$NoClaude,
   [switch]$NoSplash,
   [switch]$Fullscreen,
+  [switch]$NoSound,
+  [ValidateSet('new','classic')][string]$Art = 'new',
   [int]$ClaudeDelayMs = 800,
   [int]$FadeMs = 800,
   [int]$FadeInMs = 250,
@@ -320,6 +322,8 @@ if (-not $browser) { Log 'no Edge/Chrome found, starting Claude only'; if (-not 
 
 $splashHtml = (Resolve-Path -LiteralPath (Join-Path $here '..\splash.html')).Path
 $url = ([System.Uri]$splashHtml).AbsoluteUri + '?launcher'
+if ($NoSound) { $url += '&mute' }      # -NoSound: play the animation silently
+if ($Art -eq 'classic') { $url += '&art=classic' }   # -Art classic: the original artwork (assets\classic\); default = the new artwork
 if ($env:SPLASH_DEBUG) { $url += '&dbg' }                  # test hook: the page reports frame stalls through the window title
 $prof = Join-Path $here ('edge-profile-' + [guid]::NewGuid().ToString('N').Substring(0, 8))      # a new folder every run
 # Whatever an earlier run left behind (it was killed before it could clean up): its browser window, then its profile folder.
@@ -340,7 +344,8 @@ $edgeArgs = @(
   # (that was the white screen + skipped animation): keep rendering no matter what.
   '--disable-features=Translate,msEdgeSignIn,EdgeFirstRunExperience,msEdgeShopping,CalculateNativeWinOcclusion',
   '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling',
-  '--disable-background-networking'
+  '--disable-background-networking',
+  '--autoplay-policy=no-user-gesture-required'      # the startup sound plays without a click
 )
 Log "browser: $browser"
 try { $p = Start-Process -FilePath $browser -ArgumentList $edgeArgs -PassThru -ErrorAction Stop }
