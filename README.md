@@ -103,7 +103,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\launcher\launch.ps1 -NoCla
 | `Claude window appeared at X,Y WxH zoomed=...` | Claude 的窗口**第一次**被看到时的真实位置和大小（v1.1.2 起，在动画播放期间记录） |
 | `Claude window changed to ...` | 之后窗口的位置或大小变了（至多每秒一行）；用它可以分清是 Claude 自己改了窗口，还是别的原因 |
 | `after the splash: Claude window at ...` / `end: Claude window at ...` | 动画播完、启动器第一次在等待循环里看到 Claude 窗口时，和整个流程结束时的位置和大小。两行相差几十毫秒到一两秒，只能证明启动器收尾时没有动窗口，**不是**窗口刚出现的时刻（v1.1.1 的说明在这一点上写错了） |
-| `window-state: ...; last_rect: ...` | 动画放置时没有用到 Claude 的真实窗口（`source` 不是 `claude`），这一行说明为什么：`window-state.json` 找没找到、多久前写的、有没有匹配的显示器；`last_rect.json` 多旧（超过 14 天不再信任） |
+| `window-state: ...; last_rect: ...` | 动画放置时没有用到 Claude 的真实窗口（`source` 不是 `claude`），这一行说明为什么：`window-state.json` 找没找到、多久前写的、有没有匹配的显示器（两个候选位置里取最近写过的；修改时间在未来的排最后，v1.1.4 起）；`last_rect.json` 的情况：`file missing or unreadable`（不存在或读不了）、`ignored, written N days ago`（超过 14 天不再信任）、`ignored, its time is in the future`（修改时间在未来）、`not needed`（这次没有用到它，v1.1.3 起） |
+| `Claude brought to front` | 播完动画后，Claude 的窗口已经置前。**只有 Windows 接受了置前请求才写这一行**（v1.1.3 起；以前无条件写） |
+| `Windows did not let the launcher move the focus to Claude (its taskbar icon may flash instead)` | Windows 拒绝了置前请求（它有权不让后台程序抢焦点），这时通常只有任务栏上的 Claude 图标会闪一下（v1.1.3 起） |
 | `Claude is already running: no splash, bringing it to the front` | Claude 的窗口已经开着，没有播动画（v1.1.2 起） |
 | `Claude is running in the background (N processes, no window): no splash, asking it to show its window` | Claude 关到了托盘（进程还在、没有窗口），没有播动画，请它显示窗口（v1.1.2 起）；之后是 `Claude window is there, brought to the front`，或者 8 秒内没有窗口时的 `Claude showed no window within 8 s` |
 | `no Claude process at all: it did not start...` | 动画播完也没有任何 Claude 进程：多半是应用 ID 过期了，重新运行 `make_shortcut.ps1`（v1.1.2 起） |

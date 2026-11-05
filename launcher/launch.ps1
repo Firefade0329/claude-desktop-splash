@@ -222,7 +222,7 @@ function Get-ClaudeStateRect {
     foreach ($c in @((Join-Path $env:LOCALAPPDATA "Claude-Data\$pkg\window-state.json"), (Join-Path $env:LOCALAPPDATA "Packages\$pkg\LocalCache\Roaming\Claude\window-state.json"))) {
       if (-not (Test-Path -LiteralPath $c)) { continue }
       $ct = (Get-Item -LiteralPath $c).LastWriteTime
-      if ($ct -gt (Get-Date)) { $ct = Get-Date }      # a time in the future (clock set back) counts as "now", not as newer than everything
+      if ($ct -gt (Get-Date)) { $ct = [DateTime]::MinValue }      # a time in the future (the clock was set back) means the file was written while the clock was ahead, so it is probably the old one: it ranks last (and is still used when it is the only one)
       if (-not $f -or $ct -gt $fTime) { $f = $c; $fTime = $ct }
     }
     if (-not $f) { $script:stateWhy = 'file not found in either place'; return $null }
